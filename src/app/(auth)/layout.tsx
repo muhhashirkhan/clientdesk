@@ -4,7 +4,8 @@ import { Logo } from "@/components/ui";
 import { LiquidEffect } from "@/components/liquid-effects";
 import { Ambient } from "@/components/ambient";
 import { GlassButtons } from "@/components/glass-buttons";
-import { LockKeyhole, ArrowUpRight } from "lucide-react";
+import { LockKeyhole, ArrowUpRight, ShieldCheck } from "lucide-react";
+
 export default function AuthLayout({
   children,
 }: {
@@ -16,26 +17,43 @@ export default function AuthLayout({
       <section className="auth-art">
         <Ambient />
         <div className="auth-art-content">
-          <Link href="/login">
-            <Logo />
-          </Link>
-          <div>
-            <span className="glass-pill glass-container glass-container-pill">
+          <div className="auth-art-header auth-reveal-1">
+            <Link href="/login">
+              <Logo />
+            </Link>
+            <span className="auth-core-badge" aria-hidden="true">
+              <i /> THE AIQUOR CORE
+            </span>
+          </div>
+
+          <div className="auth-hero-copy">
+            <span className="glass-pill glass-container glass-container-pill auth-reveal-2">
               <i /> A CLEARER WAY TO COLLABORATE
             </span>
-            <h1>
+            <h1 className="auth-reveal-3">
               Good work.
               <br />
               Great <em>together.</em>
             </h1>
-            <p>
+            <p className="auth-reveal-3">
               One shared space for your next big thing. Keep projects moving,
               feedback clear, and every detail in reach.
             </p>
-            <div className="glass-card glass-container">
-              <LiquidEffect kind="glass" shape="rounded" borderRadius={26} tintOpacity={0.22} />
+            <div className="glass-card glass-container auth-reveal-4">
+              <LiquidEffect
+                kind="glass"
+                shape="rounded"
+                borderRadius={26}
+                tintOpacity={0.22}
+              />
               <span className="orbital-icon glass-container-circle">
-                <Image className="liquid-logo-fallback" src="/brand/aiquor-metal-symbol.svg" alt="" width={80} height={80} />
+                <Image
+                  className="liquid-logo-fallback"
+                  src="/brand/aiquor-metal-symbol.svg"
+                  alt=""
+                  width={80}
+                  height={80}
+                />
                 <LiquidEffect kind="logo" />
               </span>
               <div>
@@ -44,19 +62,34 @@ export default function AuthLayout({
               </div>
             </div>
           </div>
-          <footer>
+
+          <footer className="auth-reveal-4">
             <span>AIQUOR / CLIENTDESK</span>
+            <span className="auth-footer-meta" aria-hidden="true">
+              OBSIDIAN OS · CORE ACTIVE
+            </span>
             <a href="https://getaiquor.com" target="_blank" rel="noreferrer">
               Meet Aiquor <ArrowUpRight size={16} />
             </a>
           </footer>
         </div>
       </section>
+
       <section className="auth-form-side">
         <div className="auth-mobile-logo">
           <Logo />
         </div>
-        <div className="auth-form-content">{children}</div>
+        <div className="auth-form-content glass-container auth-console-enter">
+          <div className="auth-console-bar" aria-hidden="true">
+            <span>
+              <i /> CLIENT PORTAL
+            </span>
+            <span>
+              <ShieldCheck size={13} /> WORKSPACE SIGN-IN
+            </span>
+          </div>
+          {children}
+        </div>
         <p className="auth-security">
           <LockKeyhole size={14} /> A private space for you and Aiquor.
         </p>

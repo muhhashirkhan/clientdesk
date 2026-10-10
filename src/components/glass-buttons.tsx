@@ -209,61 +209,63 @@ function paintSourceBackdrop(
   ctx.clearRect(0, 0, w, h);
   if (mode === "dark-container") {
     const g = ctx.createLinearGradient(0, 0, w, h);
-    g.addColorStop(0, "#244338");
-    g.addColorStop(0.36, "#433460");
-    g.addColorStop(0.7, "#64454f");
-    g.addColorStop(1, "#1f3e34");
+    g.addColorStop(0, "#0b1913");
+    g.addColorStop(0.45, "#10221b");
+    g.addColorStop(1, "#080f0c");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
 
-    const o1 = ctx.createRadialGradient(w * 0.25, h * 0.28, 6, w * 0.25, h * 0.28, w * 0.45);
-    o1.addColorStop(0, "rgba(152, 115, 255, 0.7)");
-    o1.addColorStop(1, "rgba(152, 115, 255, 0)");
+    const o1 = ctx.createRadialGradient(w * 0.24, h * 0.25, 4, w * 0.24, h * 0.25, w * 0.48);
+    o1.addColorStop(0, "rgba(36, 229, 160, 0.34)");
+    o1.addColorStop(1, "rgba(36, 229, 160, 0)");
     ctx.fillStyle = o1;
     ctx.fillRect(0, 0, w, h);
 
-    const o2 = ctx.createRadialGradient(w * 0.78, h * 0.25, 8, w * 0.78, h * 0.25, w * 0.42);
-    o2.addColorStop(0, "rgba(255, 177, 142, 0.68)");
-    o2.addColorStop(1, "rgba(255, 177, 142, 0)");
+    const o2 = ctx.createRadialGradient(w * 0.78, h * 0.22, 6, w * 0.78, h * 0.22, w * 0.42);
+    o2.addColorStop(0, "rgba(213, 247, 165, 0.28)");
+    o2.addColorStop(1, "rgba(213, 247, 165, 0)");
     ctx.fillStyle = o2;
     ctx.fillRect(0, 0, w, h);
 
-    const o3 = ctx.createRadialGradient(w * 0.55, h * 0.82, 8, w * 0.55, h * 0.82, w * 0.46);
-    o3.addColorStop(0, "rgba(104, 228, 207, 0.62)");
-    o3.addColorStop(0.5, "rgba(213, 247, 165, 0.4)");
-    o3.addColorStop(1, "rgba(104, 228, 207, 0)");
+    const o3 = ctx.createRadialGradient(w * 0.52, h * 0.84, 8, w * 0.52, h * 0.84, w * 0.46);
+    o3.addColorStop(0, "rgba(26, 94, 68, 0.45)");
+    o3.addColorStop(1, "rgba(16, 34, 27, 0)");
     ctx.fillStyle = o3;
     ctx.fillRect(0, 0, w, h);
   } else if (mode === "circle") {
     const g = ctx.createLinearGradient(0, 0, w, h);
-    g.addColorStop(0, "#dfd4ff");
-    g.addColorStop(0.45, "#f3fde4");
-    g.addColorStop(1, "#b5f0e3");
+    g.addColorStop(0, "#122920");
+    g.addColorStop(0.5, "#193a2d");
+    g.addColorStop(1, "#0d1c16");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.beginPath();
-    ctx.arc(w * 0.34, h * 0.28, w * 0.26, 0, Math.PI * 2);
-    ctx.fill();
+    const glow = ctx.createRadialGradient(w * 0.32, h * 0.26, 2, w * 0.32, h * 0.26, w * 0.42);
+    glow.addColorStop(0, "rgba(213, 247, 165, 0.55)");
+    glow.addColorStop(0.55, "rgba(36, 229, 160, 0.24)");
+    glow.addColorStop(1, "rgba(36, 229, 160, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, w, h);
   } else {
     const g = ctx.createLinearGradient(0, 0, w, h);
-    g.addColorStop(0, "#ebe3ff");
-    g.addColorStop(0.35, "#ffefe6");
-    g.addColorStop(0.68, "#e3f9f3");
-    g.addColorStop(1, "#f3f7ee");
+    g.addColorStop(0, "#101a15");
+    g.addColorStop(0.45, "#13241c");
+    g.addColorStop(1, "#0c1410");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
-    ctx.beginPath();
-    ctx.ellipse(w * 0.74, h * 0.18, w * 0.3, h * 0.36, -0.35, 0, Math.PI * 2);
-    ctx.fill();
+    const topHighlight = ctx.createRadialGradient(w * 0.72, h * 0.16, 4, w * 0.72, h * 0.16, w * 0.46);
+    topHighlight.addColorStop(0, "rgba(213, 247, 165, 0.32)");
+    topHighlight.addColorStop(0.5, "rgba(36, 229, 160, 0.16)");
+    topHighlight.addColorStop(1, "rgba(36, 229, 160, 0)");
+    ctx.fillStyle = topHighlight;
+    ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = "rgba(213, 247, 165, 0.55)";
-    ctx.beginPath();
-    ctx.ellipse(w * 0.24, h * 0.78, w * 0.28, h * 0.34, 0.25, 0, Math.PI * 2);
-    ctx.fill();
+    const bottomGlow = ctx.createRadialGradient(w * 0.24, h * 0.8, 6, w * 0.24, h * 0.8, w * 0.44);
+    bottomGlow.addColorStop(0, "rgba(36, 229, 160, 0.26)");
+    bottomGlow.addColorStop(1, "rgba(16, 34, 27, 0)");
+    ctx.fillStyle = bottomGlow;
+    ctx.fillRect(0, 0, w, h);
   }
 }
 
@@ -309,6 +311,11 @@ export function GlassButtons() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const previousContainer = window.Container;
+    const previousButton = window.Button;
+    const previousUpdate = window.updateAllGlassInstances;
+    let updateAll: (() => void) | undefined;
+
     if (typeof window !== "undefined") {
       window.glassControls = {
         ...DEFAULT_GLASS_CONTROLS,
@@ -351,22 +358,43 @@ export function GlassButtons() {
       });
       if (!gl) return;
 
+      const shaders: WebGLShader[] = [];
+      const programs: WebGLProgram[] = [];
+      const buffers: WebGLBuffer[] = [];
+      const textures: WebGLTexture[] = [];
+      let released = false;
+      disposeGL = () => {
+        if (released) return;
+        released = true;
+        buffers.forEach((buffer) => gl.deleteBuffer(buffer));
+        textures.forEach((texture) => gl.deleteTexture(texture));
+        programs.forEach((program) => gl.deleteProgram(program));
+        shaders.forEach((shader) => gl.deleteShader(shader));
+        gl.getExtension("WEBGL_lose_context")?.loseContext();
+      };
+
       const compileProgram = (vs: string, fs: string) => {
-        const vShader = gl.createShader(gl.VERTEX_SHADER)!;
+        const vShader = gl.createShader(gl.VERTEX_SHADER);
+        if (!vShader) throw new Error("Glass shader unavailable");
+        shaders.push(vShader);
         gl.shaderSource(vShader, vs);
         gl.compileShader(vShader);
-        if (!gl.getShaderParameter(vShader, gl.COMPILE_STATUS)) return null;
+        if (!gl.getShaderParameter(vShader, gl.COMPILE_STATUS)) throw new Error("Glass shader unsupported");
 
-        const fShader = gl.createShader(gl.FRAGMENT_SHADER)!;
+        const fShader = gl.createShader(gl.FRAGMENT_SHADER);
+        if (!fShader) throw new Error("Glass shader unavailable");
+        shaders.push(fShader);
         gl.shaderSource(fShader, fs);
         gl.compileShader(fShader);
-        if (!gl.getShaderParameter(fShader, gl.COMPILE_STATUS)) return null;
+        if (!gl.getShaderParameter(fShader, gl.COMPILE_STATUS)) throw new Error("Glass shader unsupported");
 
-        const prog = gl.createProgram()!;
+        const prog = gl.createProgram();
+        if (!prog) throw new Error("Glass program unavailable");
+        programs.push(prog);
         gl.attachShader(prog, vShader);
         gl.attachShader(prog, fShader);
         gl.linkProgram(prog);
-        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error("Glass program unsupported");
         return { prog, vShader, fShader };
       };
 
@@ -374,7 +402,9 @@ export function GlassButtons() {
       const nestedBundle = compileProgram(vertSrc, nestedFragSrc);
       if (!containerBundle || !nestedBundle) return;
 
-      const posBuffer = gl.createBuffer()!;
+      const posBuffer = gl.createBuffer();
+      if (!posBuffer) throw new Error("Glass buffer unavailable");
+      buffers.push(posBuffer);
       gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
       gl.bufferData(
         gl.ARRAY_BUFFER,
@@ -382,7 +412,9 @@ export function GlassButtons() {
         gl.STATIC_DRAW,
       );
 
-      const texBuffer = gl.createBuffer()!;
+      const texBuffer = gl.createBuffer();
+      if (!texBuffer) throw new Error("Glass buffer unavailable");
+      buffers.push(texBuffer);
       gl.bindBuffer(gl.ARRAY_BUFFER, texBuffer);
       gl.bufferData(
         gl.ARRAY_BUFFER,
@@ -390,7 +422,9 @@ export function GlassButtons() {
         gl.STATIC_DRAW,
       );
 
-      const tex = gl.createTexture()!;
+      const tex = gl.createTexture();
+      if (!tex) throw new Error("Glass texture unavailable");
+      textures.push(tex);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -424,7 +458,7 @@ export function GlassButtons() {
       };
 
       const renderAll = () => {
-        if (cancelled) return;
+        if (cancelled || released || gl.isContextLost() || document.hidden) return;
         const controls: GlassControlsConfig = {
           ...DEFAULT_GLASS_CONTROLS,
           ...(window.glassControls || {}),
@@ -621,22 +655,13 @@ export function GlassButtons() {
 
       renderAll();
 
-      window.updateAllGlassInstances = () => {
+      updateAll = () => {
         renderAll();
         triggerAllGlassEffectsUpdate();
       };
 
-      disposeGL = () => {
-        gl.deleteBuffer(posBuffer);
-        gl.deleteBuffer(texBuffer);
-        gl.deleteTexture(tex);
-        gl.deleteProgram(containerBundle.prog);
-        gl.deleteShader(containerBundle.vShader);
-        gl.deleteShader(containerBundle.fShader);
-        gl.deleteProgram(nestedBundle.prog);
-        gl.deleteShader(nestedBundle.vShader);
-        gl.deleteShader(nestedBundle.fShader);
-      };
+      window.updateAllGlassInstances = updateAll;
+
     }
 
     initPipeline().catch(() => {
@@ -648,6 +673,9 @@ export function GlassButtons() {
       controller.abort();
       observer.disconnect();
       disposeGL();
+      if (window.updateAllGlassInstances === updateAll) window.updateAllGlassInstances = previousUpdate;
+      if (window.Container === GlassContainer) window.Container = previousContainer;
+      if (window.Button === GlassButton) window.Button = previousButton;
       [scope, document.documentElement].forEach((t) => {
         t.style.removeProperty("--liquid-container-texture");
         t.style.removeProperty("--liquid-dark-container-texture");

@@ -52,12 +52,11 @@ function drawBackdropTexture(
 ) {
   ctx.clearRect(0, 0, width, height);
   if (variant === "dark") {
-    // Rich emerald + lavender/peach/mint ShaderGradient backdrop for dark glass surfaces
+    // Obsidian OS dark forest + emerald/lime backdrop for glass surfaces
     const base = ctx.createLinearGradient(0, 0, width, height);
-    base.addColorStop(0, "#244338");
-    base.addColorStop(0.38, "#3d3356");
-    base.addColorStop(0.72, "#59434b");
-    base.addColorStop(1, "#1e3d33");
+    base.addColorStop(0, "#0b1a14");
+    base.addColorStop(0.45, "#10221b");
+    base.addColorStop(1, "#07100c");
     ctx.fillStyle = base;
     ctx.fillRect(0, 0, width, height);
 
@@ -67,10 +66,10 @@ function drawBackdropTexture(
       8,
       width * 0.22,
       height * 0.28,
-      width * 0.45,
+      width * 0.46,
     );
-    orb1.addColorStop(0, "rgba(152, 115, 255, 0.65)");
-    orb1.addColorStop(1, "rgba(152, 115, 255, 0)");
+    orb1.addColorStop(0, "rgba(36, 229, 160, 0.42)");
+    orb1.addColorStop(1, "rgba(36, 229, 160, 0)");
     ctx.fillStyle = orb1;
     ctx.fillRect(0, 0, width, height);
 
@@ -82,8 +81,8 @@ function drawBackdropTexture(
       height * 0.24,
       width * 0.42,
     );
-    orb2.addColorStop(0, "rgba(255, 177, 142, 0.62)");
-    orb2.addColorStop(1, "rgba(255, 177, 142, 0)");
+    orb2.addColorStop(0, "rgba(213, 247, 165, 0.34)");
+    orb2.addColorStop(1, "rgba(213, 247, 165, 0)");
     ctx.fillStyle = orb2;
     ctx.fillRect(0, 0, width, height);
 
@@ -95,21 +94,20 @@ function drawBackdropTexture(
       height * 0.82,
       width * 0.48,
     );
-    orb3.addColorStop(0, "rgba(104, 228, 207, 0.58)");
-    orb3.addColorStop(0.5, "rgba(213, 247, 165, 0.35)");
-    orb3.addColorStop(1, "rgba(104, 228, 207, 0)");
+    orb3.addColorStop(0, "rgba(20, 82, 58, 0.55)");
+    orb3.addColorStop(0.5, "rgba(36, 229, 160, 0.22)");
+    orb3.addColorStop(1, "rgba(16, 34, 27, 0)");
     ctx.fillStyle = orb3;
     ctx.fillRect(0, 0, width, height);
   } else if (variant === "button" || variant === "circle") {
     const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, "#dcd0ff");
-    gradient.addColorStop(0.35, "#f3fde6");
-    gradient.addColorStop(0.68, "#ffe2d4");
-    gradient.addColorStop(1, "#b4efe3");
+    gradient.addColorStop(0, "#122a20");
+    gradient.addColorStop(0.5, "#193b2d");
+    gradient.addColorStop(1, "#0d1d16");
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
-    ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.fillStyle = "rgba(213, 247, 165, 0.42)";
     ctx.beginPath();
     ctx.ellipse(
       width * 0.72,
@@ -122,7 +120,7 @@ function drawBackdropTexture(
     );
     ctx.fill();
 
-    ctx.fillStyle = "rgba(213, 247, 165, 0.65)";
+    ctx.fillStyle = "rgba(36, 229, 160, 0.38)";
     ctx.beginPath();
     ctx.ellipse(
       width * 0.24,
@@ -135,16 +133,14 @@ function drawBackdropTexture(
     );
     ctx.fill();
   } else {
-    // Workspace container light glass backdrop (lavender, peach, mint, warm paper)
     const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, "#ede6ff");
-    gradient.addColorStop(0.34, "#fff0e8");
-    gradient.addColorStop(0.68, "#e6faf5");
-    gradient.addColorStop(1, "#f4f8ef");
+    gradient.addColorStop(0, "#101b16");
+    gradient.addColorStop(0.5, "#13241c");
+    gradient.addColorStop(1, "#0b130f");
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
-    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.fillStyle = "rgba(213, 247, 165, 0.26)";
     ctx.beginPath();
     ctx.ellipse(
       width * 0.75,
@@ -157,27 +153,14 @@ function drawBackdropTexture(
     );
     ctx.fill();
 
-    ctx.fillStyle = "rgba(152, 115, 255, 0.22)";
+    ctx.fillStyle = "rgba(36, 229, 160, 0.22)";
     ctx.beginPath();
     ctx.ellipse(
-      width * 0.18,
-      height * 0.3,
-      width * 0.25,
-      height * 0.35,
-      0.3,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-
-    ctx.fillStyle = "rgba(104, 228, 207, 0.26)";
-    ctx.beginPath();
-    ctx.ellipse(
-      width * 0.62,
-      height * 0.82,
-      width * 0.34,
-      height * 0.32,
-      -0.2,
+      width * 0.22,
+      height * 0.78,
+      width * 0.3,
+      height * 0.34,
+      0.25,
       0,
       Math.PI * 2,
     );
@@ -252,8 +235,9 @@ export function LiquidEffect({
         shaders.forEach((s) => gl.deleteShader(s));
         gl.deleteTexture(texture);
         gl.deleteProgram(program);
+        gl.getExtension("WEBGL_lose_context")?.loseContext();
       };
-      if (!program || !texture) return;
+      if (!program || !texture) throw new Error("Effect unavailable");
       sources.forEach((source, i) => {
         const shader = gl.createShader(
           i === 0 ? gl.VERTEX_SHADER : gl.FRAGMENT_SHADER,
@@ -469,17 +453,18 @@ export function LiquidEffect({
           canvas.dataset.ready = "true";
           onRender?.(canvas);
         }
-        if (kind === "logo" && !motion.matches)
+        if (visible && kind === "logo" && !motion.matches)
           frame = requestAnimationFrame(draw);
       };
       const redraw = () => {
         cancelAnimationFrame(frame);
         last = 0;
-        frame = requestAnimationFrame(draw);
+        if (!document.hidden) frame = requestAnimationFrame(draw);
       };
       redraw();
       activeUpdaters.add(redraw);
       motion.addEventListener("change", redraw);
+      document.addEventListener("visibilitychange", redraw);
       const resize = new ResizeObserver(redraw);
       resize.observe(canvas);
       const cleanup = dispose;
@@ -487,15 +472,27 @@ export function LiquidEffect({
         activeUpdaters.delete(redraw);
         resize.disconnect();
         motion.removeEventListener("change", redraw);
+        document.removeEventListener("visibilitychange", redraw);
         cleanup();
       };
     }
-    start().catch(() => {
-      dispose();
-    });
+    // Hidden responsive artwork must not reserve a WebGL context or poll every frame.
+    let started = false;
+    const maybeStart = () => {
+      const box = canvas.getBoundingClientRect();
+      if (started || cancelled || document.hidden || box.width === 0 || box.height === 0) return;
+      started = true;
+      start().catch(() => dispose());
+    };
+    const visibilityObserver = new ResizeObserver(maybeStart);
+    visibilityObserver.observe(canvas);
+    document.addEventListener("visibilitychange", maybeStart);
+    maybeStart();
     return () => {
       cancelled = true;
       controller.abort();
+      visibilityObserver.disconnect();
+      document.removeEventListener("visibilitychange", maybeStart);
       dispose();
     };
   }, [
