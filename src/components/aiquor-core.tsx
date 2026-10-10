@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { CanvasLifecycle } from "./canvas-lifecycle";
 
@@ -243,7 +243,10 @@ const initialInteraction: InteractionState = {
   hidden: false,
 };
 
-function KineticSculpture({ compact, interactionState }: { compact: boolean; interactionState: InteractionState }) {
+const interactionState: InteractionState = { ...initialInteraction };
+
+function KineticSculpture({ compact }: { compact: boolean }) {
+  const viewport = useThree((state) => state.viewport);
   const rootGroup = useRef<THREE.Group>(null);
   const outerGlassRef = useRef<THREE.Mesh>(null);
   const innerGlassRef = useRef<THREE.Mesh>(null);
@@ -506,8 +509,9 @@ function KineticSculpture({ compact, interactionState }: { compact: boolean; int
         4.0,
         delta,
       );
-      const basePosY = compact ? 0.04 : 0.34;
-      rootGroup.current.position.y = basePosY + Math.sin(elapsed * 0.9) * 0.06;
+      const basePosY = compact ? -0.04 : viewport.height * 0.175;
+      rootGroup.current.position.x = compact ? viewport.width * 0.25 : viewport.width * 0.11;
+      rootGroup.current.position.y = basePosY + Math.sin(elapsed * 0.9) * 0.05;
     }
 
     const speedMultiplier = 1 + focus * 0.55;
@@ -559,13 +563,17 @@ function KineticSculpture({ compact, interactionState }: { compact: boolean; int
     }
   });
 
-  const baseScale = compact ? 0.78 : 0.86;
+  const baseScale = compact
+    ? Math.min(0.66, viewport.height * 0.175)
+    : Math.min(0.6, Math.min(viewport.width, viewport.height) * 0.175);
+  const initialX = compact ? viewport.width * 0.25 : viewport.width * 0.11;
+  const initialY = compact ? -0.04 : viewport.height * 0.175;
 
   return (
     <group
       ref={rootGroup}
       scale={baseScale}
-      position={[compact ? 0 : 0.14, compact ? 0.04 : 0.34, 0]}
+      position={[initialX, initialY, 0]}
     >
       <ambientLight intensity={0.65} color="#102b20" />
       <directionalLight position={[-4, 5, 4]} intensity={2.2} color="#d5f7a5" />
@@ -702,8 +710,6 @@ function KineticSculpture({ compact, interactionState }: { compact: boolean; int
 }
 
 export default function AiquorCore({ onUnavailable }: { onUnavailable: () => void }) {
-  const interaction = useRef({ ...initialInteraction });
-  const interactionState = interaction.current;
   const [ready, setReady] = useState(false);
   const [compact, setCompact] = useState(false);
 
@@ -790,7 +796,7 @@ export default function AiquorCore({ onUnavailable }: { onUnavailable: () => voi
       document.documentElement.style.removeProperty("--auth-pointer-x");
       document.documentElement.style.removeProperty("--auth-pointer-y");
     };
-  }, [interactionState]);
+  }, []);
 
   return (
     <div
@@ -809,7 +815,7 @@ export default function AiquorCore({ onUnavailable }: { onUnavailable: () => voi
         }}
       >
         <CanvasLifecycle onUnavailable={onUnavailable} />
-        <KineticSculpture compact={compact} interactionState={interactionState} />
+        <KineticSculpture compact={compact} />
       </Canvas>
     </div>
   );

@@ -12,14 +12,14 @@ export function CanvasLifecycle({ onUnavailable }: { onUnavailable: () => void }
     const update = () => setFrameloop(document.hidden ? "never" : "always");
     const lost = () => onUnavailable();
     const previousShaderError = gl.debug.onShaderError;
-    gl.debug.onShaderError = onUnavailable;
+    Object.assign(gl.debug, { onShaderError: onUnavailable });
     update();
     document.addEventListener("visibilitychange", update);
     gl.domElement.addEventListener("webglcontextlost", lost);
     return () => {
       document.removeEventListener("visibilitychange", update);
       gl.domElement.removeEventListener("webglcontextlost", lost);
-      gl.debug.onShaderError = previousShaderError;
+      Object.assign(gl.debug, { onShaderError: previousShaderError });
     };
   }, [gl, setFrameloop, onUnavailable]);
 
