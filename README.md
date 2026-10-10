@@ -2,11 +2,9 @@
 
 Next.js 16, TypeScript, Tailwind 4 and Supabase. One Aiquor business workspace, with an admin role and client memberships. Production has no seed customers or invented metrics.
 
-## Live demo
+## Current status
 
-[Open ClientDesk](https://aiquor-clientdesk.vercel.app/dashboard). The portal requires an invited account.
-
-ClientDesk helps agencies manage clients, projects, milestones, files, discussions, approvals and notifications in a shared workspace.
+Live at https://aiquor-clientdesk.vercel.app with real Supabase authentication, database permissions and private storage. Hosted API and browser workflow checks have passed; owned inboxes received setup/sign-in emails. Resend SMTP is configured with the verified `getaiquor.com` domain; a real password-reset email reached the owned Gmail inbox. The hosted recovery flow passed on a disposable account. See `STATUS.md` and `ACCEPTANCE.md` for remaining release checks.
 
 ## Run locally
 
@@ -20,14 +18,14 @@ Missing Supabase configuration displays a setup notice and disables login. It do
 
 ## Configure Supabase
 
-1. Create a dedicated Supabase project. Apply both files in `supabase/migrations/` in date order through the SQL editor or Supabase CLI migrations. They create tables, row permissions, workflow functions and the private `project-files` bucket. The second migration fixes the admin policy for creating projects with returned rows. Do not reapply the initial migration to an existing configured project.
+1. Create a dedicated Supabase project. Apply both files in `supabase/migrations/` in date order through the SQL editor or Supabase CLI migrations. They create tables, row permissions, workflow functions and the private `project-files` bucket. The second migration fixes the admin policy for creating projects with returned rows. Both are already applied to the live project; do not reapply the initial migration there.
 2. In `.env.local`, set the project URL, publishable key and server-only service role key. Never prefix the service key with `NEXT_PUBLIC_`, paste it into chat, or commit it. The application uses it only for invitations; ordinary reads and writes use the signed-in user's session and RLS.
 3. Set `NEXT_PUBLIC_APP_URL` to the portal origin. In Supabase Auth, use that origin as Site URL and allow `<origin>/auth/callback**` and `<origin>/auth/confirm**` in Redirect URLs. Add localhost separately for development. Use explicit production origins.
 4. Disable public sign-ups; admin invitations create users. Set a minimum password length of 12, retain email verification, and configure email rate limits. This portal has no public registration page.
-5. Configure custom SMTP and verify its sender domain. Supabase's default email service is restricted to organization team addresses, is rate limited and is not production email delivery. A forwarding inbox alone is not an SMTP sender. Official instructions: https://supabase.com/docs/guides/auth/auth-smtp . Test invitation, magic-link and reset emails using your own test accounts.
-6. The included templates in `supabase/templates/` use `RedirectTo`, a one-use `token_hash`, and the appropriate verification `type`. The app supplies a callback URL containing the safe relative `next` destination. `/auth/callback` supports these links across browsers, and also supports standard PKCE/implicit links. If reverting to standard PKCE recovery emails, open those links in the browser that requested them.
-7. Set `CLIENTDESK_ADMIN_EMAIL=admin@example.com`, then `npm run bootstrap:admin`. It requests an invitation when needed, grants the admin role server-side, and never creates or logs a password. Open the setup email and choose your own password. If that email expires, use Forgot password. Never allow users to choose their own role.
-8. Sign in, configure business settings, and verify the client invitation, project, file upload, approval and recovery workflows using test accounts before onboarding customers.
+5. Configure custom SMTP and verify its sender domain. Supabase's default email service is restricted to organization team addresses, is rate limited and is not production email delivery. A forwarding inbox alone is not an SMTP sender. Official instructions: https://supabase.com/docs/guides/auth/auth-smtp . Test the invitation, magic-link and reset emails against the two approved inboxes.
+6. The installed templates in `supabase/templates/` use `RedirectTo`, a one-use `token_hash`, and the appropriate verification `type`. The app supplies a callback URL containing the safe relative `next` destination. `/auth/callback` supports these links across browsers, as verified by the recovery test, and also supports standard PKCE/implicit links. If reverting to standard PKCE recovery emails, open those links in the browser that requested them.
+7. Set `CLIENTDESK_ADMIN_EMAIL=hello@getaiquor.com`, then `npm run bootstrap:admin`. It requests an invitation when needed, grants the admin role server-side, and never creates or logs a password. Open the setup email and choose your own password. If that email expires, use Forgot password. Never allow users to choose their own role.
+8. Sign in, enter Aiquor business settings, add the owned test client `imeanhashir88@gmail.com`, create a test project, and run `ACCEPTANCE.md` before onboarding customers.
 
 Deploy to any Next.js Node hosting provider, set the same environment variables there, update the Supabase redirect allowlist, and repeat the acceptance workflow at the final URL. Static GitHub Pages cannot run this application's server actions.
 
