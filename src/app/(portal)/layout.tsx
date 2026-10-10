@@ -35,7 +35,7 @@ export default async function PortalLayout({
           admin={profile.role === "admin"}
           unread={unread.count ?? 0}
         />
-        <div className="sidebar-note">
+        <div className="sidebar-note glass-container">
           <ShieldCheck size={20} />
           <p>
             A shared space.
@@ -47,7 +47,7 @@ export default async function PortalLayout({
           </a>
         </div>
         <div className="sidebar-user">
-          <span className="avatar">
+          <span className="avatar glass-container-circle">
             {(profile.full_name || user.email || "A").slice(0, 1).toUpperCase()}
           </span>
           <div>
@@ -58,13 +58,13 @@ export default async function PortalLayout({
       </aside>
       <div className="main-column">
         <Ambient workspace />
-        <header className="topbar">
+        <header className="topbar glass-container">
           <span>
             <i className="live-dot" /> Your private project workspace
           </span>
           <div>
             <RefreshButton />
-            <Link href="/settings" className="account-link">
+            <Link href="/settings" className="account-link glass-button">
               {profile.full_name || user.email}
             </Link>
           </div>

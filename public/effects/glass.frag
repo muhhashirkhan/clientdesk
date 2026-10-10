@@ -244,7 +244,8 @@
         }
         
         vec3 finalTinted = mix(color.rgb, sampledGradient, u_tintOpacity * 0.3);
-        color = vec4(finalTinted, color.a);
+        vec3 rimHighlight = vec3(1.0) * (rimIntensity * u_rimIntensity * 1.4 + edgeIntensity * u_edgeIntensity * 2.0);
+        color = vec4(clamp(finalTinted + rimHighlight, 0.0, 1.0), color.a);
         
         // Shape mask (rounded rectangle, circle, or pill)
         float maskDistance;

@@ -58,7 +58,7 @@ export function Form({
         {children}
         <button
           type="submit"
-          className={danger ? "button danger" : "button primary"}
+          className={danger ? "button danger glass-button" : "button primary glass-button"}
         >
           {pending ? <LoaderCircle size={16} className="spin" /> : null}
           {pending ? "Saving…" : submit}
@@ -160,7 +160,7 @@ export function RefreshButton() {
   const router = useRouter();
   return (
     <button
-      className="icon-button"
+      className="icon-button glass-button glass-button-circle"
       title="Refresh current data"
       aria-label="Refresh current data"
       onClick={() => router.refresh()}
@@ -230,7 +230,7 @@ export function UploadForm({
     }
   }
   return (
-    <form ref={ref} onSubmit={upload} className="upload-form">
+    <form ref={ref} onSubmit={upload} className="upload-form glass-container">
       <Upload size={25} />
       <div>
         <h3>Add files to this project</h3>
@@ -248,7 +248,7 @@ export function UploadForm({
         required
         disabled={busy}
       />
-      <button className="button primary" disabled={busy}>
+      <button className="button primary glass-button" disabled={busy}>
         {busy ? (
           <LoaderCircle className="spin" size={16} />
         ) : (

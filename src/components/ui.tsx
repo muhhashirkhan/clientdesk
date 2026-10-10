@@ -50,14 +50,14 @@ export function Empty({
   action?: string;
 }) {
   return (
-    <div className="empty">
-      <span className="empty-icon">
+    <div className="empty glass-container">
+      <span className="empty-icon glass-container-circle">
         <FolderOpen size={26} />
       </span>
       <h2>{title}</h2>
       <p>{description}</p>
       {href && (
-        <Link className="button primary" href={href}>
+        <Link className="button primary glass-button" href={href}>
           {action}
           <ArrowUpRight size={16} />
         </Link>
@@ -67,7 +67,7 @@ export function Empty({
 }
 export function Badge({ value }: { value: string }) {
   return (
-    <span className={`badge ${value}`}>
+    <span className={`badge glass-container-pill ${value}`}>
       <i />
       {label(value)}
     </span>
@@ -75,7 +75,7 @@ export function Badge({ value }: { value: string }) {
 }
 export function NewProjectLink() {
   return (
-    <Link href="/projects/new" className="button primary">
+    <Link href="/projects/new" className="button primary glass-button">
       <Plus size={17} />
       New project
     </Link>
@@ -89,7 +89,7 @@ export function BackLink({
   children: ReactNode;
 }) {
   return (
-    <Link className="back-link" href={href}>
+    <Link className="back-link glass-button" href={href}>
       <ArrowLeft size={15} />
       {children}
     </Link>
@@ -106,9 +106,9 @@ export function ProjectCard({
 }) {
   const done = milestones.filter((m) => m.status === "approved").length;
   return (
-    <Link href={"/projects/" + project.id} className="project-card">
+    <Link href={"/projects/" + project.id} className="project-card glass-container">
       <div className="card-top">
-        <span className="project-symbol">
+        <span className="project-symbol glass-container-circle">
           <FolderOpen size={20} />
         </span>
         <Badge value={project.archived ? "archived" : project.status} />

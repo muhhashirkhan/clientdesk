@@ -1,11 +1,211 @@
 "use client";
 import { useEffect, useRef } from "react";
 
+export type GlassShapeType = "rounded" | "circle" | "pill";
+
+export interface GlassControlsConfig {
+  edgeIntensity: number;
+  rimIntensity: number;
+  baseIntensity: number;
+  edgeDistance: number;
+  rimDistance: number;
+  baseDistance: number;
+  cornerBoost: number;
+  rippleEffect: number;
+  blurRadius: number;
+  tintOpacity: number;
+}
+
+export const DEFAULT_GLASS_CONTROLS: GlassControlsConfig = {
+  edgeIntensity: 0.028,
+  rimIntensity: 0.085,
+  baseIntensity: 0.014,
+  edgeDistance: 0.15,
+  rimDistance: 0.8,
+  baseDistance: 0.1,
+  cornerBoost: 0.032,
+  rippleEffect: 0.06,
+  blurRadius: 6.5,
+  tintOpacity: 0.22,
+};
+
+declare global {
+  interface Window {
+    glassControls?: Partial<GlassControlsConfig>;
+    updateAllGlassInstances?: () => void;
+    Container?: unknown;
+    Button?: unknown;
+  }
+}
+
+const activeUpdaters = new Set<() => void>();
+
+export function triggerAllGlassEffectsUpdate() {
+  activeUpdaters.forEach((fn) => fn());
+}
+
+function drawBackdropTexture(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  variant: "dark" | "light" | "button" | "circle",
+) {
+  ctx.clearRect(0, 0, width, height);
+  if (variant === "dark") {
+    // Rich emerald + lavender/peach/mint ShaderGradient backdrop for dark glass surfaces
+    const base = ctx.createLinearGradient(0, 0, width, height);
+    base.addColorStop(0, "#244338");
+    base.addColorStop(0.38, "#3d3356");
+    base.addColorStop(0.72, "#59434b");
+    base.addColorStop(1, "#1e3d33");
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, width, height);
+
+    const orb1 = ctx.createRadialGradient(
+      width * 0.22,
+      height * 0.28,
+      8,
+      width * 0.22,
+      height * 0.28,
+      width * 0.45,
+    );
+    orb1.addColorStop(0, "rgba(152, 115, 255, 0.65)");
+    orb1.addColorStop(1, "rgba(152, 115, 255, 0)");
+    ctx.fillStyle = orb1;
+    ctx.fillRect(0, 0, width, height);
+
+    const orb2 = ctx.createRadialGradient(
+      width * 0.76,
+      height * 0.24,
+      10,
+      width * 0.76,
+      height * 0.24,
+      width * 0.42,
+    );
+    orb2.addColorStop(0, "rgba(255, 177, 142, 0.62)");
+    orb2.addColorStop(1, "rgba(255, 177, 142, 0)");
+    ctx.fillStyle = orb2;
+    ctx.fillRect(0, 0, width, height);
+
+    const orb3 = ctx.createRadialGradient(
+      width * 0.58,
+      height * 0.82,
+      8,
+      width * 0.58,
+      height * 0.82,
+      width * 0.48,
+    );
+    orb3.addColorStop(0, "rgba(104, 228, 207, 0.58)");
+    orb3.addColorStop(0.5, "rgba(213, 247, 165, 0.35)");
+    orb3.addColorStop(1, "rgba(104, 228, 207, 0)");
+    ctx.fillStyle = orb3;
+    ctx.fillRect(0, 0, width, height);
+  } else if (variant === "button" || variant === "circle") {
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#dcd0ff");
+    gradient.addColorStop(0.35, "#f3fde6");
+    gradient.addColorStop(0.68, "#ffe2d4");
+    gradient.addColorStop(1, "#b4efe3");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.beginPath();
+    ctx.ellipse(
+      width * 0.72,
+      height * 0.18,
+      width * 0.28,
+      height * 0.36,
+      -0.35,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(213, 247, 165, 0.65)";
+    ctx.beginPath();
+    ctx.ellipse(
+      width * 0.24,
+      height * 0.78,
+      width * 0.3,
+      height * 0.34,
+      0.25,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  } else {
+    // Workspace container light glass backdrop (lavender, peach, mint, warm paper)
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#ede6ff");
+    gradient.addColorStop(0.34, "#fff0e8");
+    gradient.addColorStop(0.68, "#e6faf5");
+    gradient.addColorStop(1, "#f4f8ef");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.beginPath();
+    ctx.ellipse(
+      width * 0.75,
+      height * 0.16,
+      width * 0.32,
+      height * 0.38,
+      -0.4,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(152, 115, 255, 0.22)";
+    ctx.beginPath();
+    ctx.ellipse(
+      width * 0.18,
+      height * 0.3,
+      width * 0.25,
+      height * 0.35,
+      0.3,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(104, 228, 207, 0.26)";
+    ctx.beginPath();
+    ctx.ellipse(
+      width * 0.62,
+      height * 0.82,
+      width * 0.34,
+      height * 0.32,
+      -0.2,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+}
+
 // The original MIT-licensed shaders are served locally; no screenshots of the
 // page or account data are captured. Glass samples a decorative texture only.
-export function LiquidEffect({ kind, button = false, onRender }: {
-  kind: "logo" | "glass";
+export function LiquidEffect({
+  kind,
+  button = false,
+  shape,
+  warp,
+  borderRadius: customBorderRadius,
+  tintOpacity: customTintOpacity,
+  variant,
+  parentCanvas,
+  onRender,
+}: {
+  kind: "logo" | "glass" | "glass-nested";
   button?: boolean;
+  shape?: GlassShapeType;
+  warp?: boolean;
+  borderRadius?: number;
+  tintOpacity?: number;
+  variant?: "dark" | "light" | "button" | "circle";
+  parentCanvas?: HTMLCanvasElement | null;
   onRender?: (canvas: HTMLCanvasElement) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -19,9 +219,16 @@ export function LiquidEffect({ kind, button = false, onRender }: {
     const controller = new AbortController();
     async function start() {
       if (!canvas) return;
+      const vertFile = kind === "logo" ? "logo.vert" : "glass.vert";
+      const fragFile =
+        kind === "logo"
+          ? "logo.frag"
+          : kind === "glass-nested"
+            ? "glass-nested.frag"
+            : "glass.frag";
       const sources = await Promise.all(
-        ["vert", "frag"].map(async (ext) => {
-          const r = await fetch(`/effects/${kind}.${ext}`, {
+        [vertFile, fragFile].map(async (file) => {
+          const r = await fetch(`/effects/${file}`, {
             signal: controller.signal,
           });
           if (!r.ok) throw Error("Effect unavailable");
@@ -29,7 +236,11 @@ export function LiquidEffect({ kind, button = false, onRender }: {
         }),
       );
       if (cancelled) return;
-      const gl = canvas.getContext("webgl", { alpha: true, antialias: false });
+      const gl = canvas.getContext("webgl", {
+        alpha: true,
+        antialias: false,
+        preserveDrawingBuffer: true,
+      });
       if (!gl) return;
       const shaders: WebGLShader[] = [],
         buffers: WebGLBuffer[] = [];
@@ -76,11 +287,11 @@ export function LiquidEffect({ kind, button = false, onRender }: {
         kind === "logo" ? "aVertexPosition" : "a_position",
         [-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1],
       );
-      if (kind === "glass")
+      if (kind !== "logo")
         attribute("a_texcoord", [0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0]);
       const art = document.createElement("canvas");
       art.width = 512;
-      art.height = kind === "logo" ? 512 : 160;
+      art.height = kind === "logo" ? 512 : 256;
       const ctx = art.getContext("2d")!;
       if (kind === "logo") {
         const image = new Image();
@@ -89,19 +300,19 @@ export function LiquidEffect({ kind, button = false, onRender }: {
         if (cancelled) return;
         ctx.drawImage(image, 0, 0, 512, 512);
       } else {
-        const gradient = ctx.createLinearGradient(0, 0, 512, 160);
-        gradient.addColorStop(0, button ? "#d4c4ff" : "#335a49");
-        gradient.addColorStop(0.6, button ? "#f4fce9" : "#6b8573");
-        gradient.addColorStop(1, button ? "#a8e6db" : "#203e32");
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 512, 160);
-        ctx.fillStyle = button ? "#ffffff" : "#c5dbad";
-        ctx.beginPath();
-        ctx.ellipse(390, 10, 130, 55, -0.5, 0, Math.PI * 2);
-        ctx.fill();
+        const resolvedVariant =
+          variant || (button ? "button" : "dark");
+        drawBackdropTexture(ctx, art.width, art.height, resolvedVariant);
       }
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, art);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        parentCanvas && parentCanvas.width > 0 ? parentCanvas : art,
+      );
       for (const param of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER])
         gl.texParameteri(gl.TEXTURE_2D, param, gl.LINEAR);
       for (const param of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T])
@@ -113,70 +324,138 @@ export function LiquidEffect({ kind, button = false, onRender }: {
         ),
         0,
       );
-      const values =
-        kind === "logo"
-          ? {
-              speed: 0.1,
-              iterations: 11,
-              scale: 0.112,
-              dotFactor: 0.28,
-              dotMultiplier: 0.36,
-              vOffset: 0,
-              intensityFactor: 0.12,
-              expFactor: 0.1,
-              noiseIntensity: 0.08,
-              colorShift: 0.12,
-              logoOpacity: 0,
-              logoScale: 1,
-              logoInteractStrength: 0.5,
-            }
-          : {
-              scrollY: 0,
-              blurRadius: 4,
-              borderRadius: button ? 40 : 20,
-              warp: 1,
-              edgeIntensity: 0.025,
-              rimIntensity: 0.08,
-              baseIntensity: 0.01,
-              edgeDistance: 0.12,
-              rimDistance: 0.5,
-              baseDistance: 0.1,
-              cornerBoost: 0.025,
-              rippleEffect: 0.02,
-              tintOpacity: 0.08,
-            };
-      for (const [key, value] of Object.entries(values))
-        gl.uniform1f(gl.getUniformLocation(program, "u_" + key), value);
-      gl.uniform3f(
-        gl.getUniformLocation(program, "u_colorFactors"),
-        1.2,
-        1.3,
-        1.1,
-      );
-      gl.uniform1i(gl.getUniformLocation(program, "u_logoBlendMode"), 0);
-      gl.uniform2f(
-        gl.getUniformLocation(program, "u_textureSize"),
-        art.width,
-        art.height,
-      );
-      gl.uniform2f(
-        gl.getUniformLocation(program, "u_containerPosition"),
-        art.width / 2,
-        art.height / 2,
-      );
+
+      const applyUniforms = (width: number, height: number) => {
+        if (kind === "logo") {
+          const logoValues = {
+            speed: 0.1,
+            iterations: 11,
+            scale: 0.112,
+            dotFactor: 0.28,
+            dotMultiplier: 0.36,
+            vOffset: 0,
+            intensityFactor: 0.12,
+            expFactor: 0.1,
+            noiseIntensity: 0.08,
+            colorShift: 0.12,
+            logoOpacity: 0,
+            logoScale: 1,
+            logoInteractStrength: 0.5,
+          };
+          for (const [key, value] of Object.entries(logoValues))
+            gl.uniform1f(gl.getUniformLocation(program, "u_" + key), value);
+          gl.uniform3f(
+            gl.getUniformLocation(program, "u_colorFactors"),
+            1.2,
+            1.3,
+            1.1,
+          );
+          gl.uniform1i(gl.getUniformLocation(program, "u_logoBlendMode"), 0);
+          return;
+        }
+
+        const controls = {
+          ...DEFAULT_GLASS_CONTROLS,
+          ...(typeof window !== "undefined" ? window.glassControls : {}),
+        };
+        const resolvedShape: GlassShapeType =
+          shape || (button ? "pill" : "rounded");
+        const resolvedRadius =
+          resolvedShape === "circle"
+            ? Math.min(width, height) / 2
+            : resolvedShape === "pill"
+              ? height / 2
+              : (customBorderRadius ?? (button ? 40 : 18));
+
+        const texW =
+          parentCanvas && parentCanvas.width > 0
+            ? parentCanvas.width
+            : art.width;
+        const texH =
+          parentCanvas && parentCanvas.height > 0
+            ? parentCanvas.height
+            : art.height;
+
+        const glassValues = {
+          scrollY: typeof window !== "undefined" ? window.scrollY || 0 : 0,
+          pageHeight:
+            typeof document !== "undefined"
+              ? Math.max(
+                  document.body?.scrollHeight || 800,
+                  document.documentElement?.scrollHeight || 800,
+                )
+              : 1000,
+          viewportHeight:
+            typeof window !== "undefined" ? window.innerHeight || 800 : 800,
+          blurRadius: controls.blurRadius,
+          borderRadius: resolvedRadius,
+          warp: warp !== undefined ? (warp ? 1 : 0) : button ? 1 : 0,
+          edgeIntensity: controls.edgeIntensity,
+          rimIntensity: controls.rimIntensity,
+          baseIntensity: controls.baseIntensity,
+          edgeDistance: controls.edgeDistance,
+          rimDistance: controls.rimDistance,
+          baseDistance: controls.baseDistance,
+          cornerBoost: controls.cornerBoost,
+          rippleEffect: controls.rippleEffect,
+          tintOpacity: customTintOpacity ?? controls.tintOpacity,
+        };
+        for (const [key, value] of Object.entries(glassValues)) {
+          const loc = gl.getUniformLocation(program, "u_" + key);
+          if (loc) gl.uniform1f(loc, value);
+        }
+        gl.uniform2f(
+          gl.getUniformLocation(program, "u_textureSize"),
+          texW,
+          texH,
+        );
+        gl.uniform2f(
+          gl.getUniformLocation(program, "u_containerPosition"),
+          texW / 2,
+          texH / 2,
+        );
+        if (kind === "glass-nested") {
+          gl.uniform2f(
+            gl.getUniformLocation(program, "u_containerSize"),
+            texW,
+            texH,
+          );
+          gl.uniform2f(
+            gl.getUniformLocation(program, "u_buttonPosition"),
+            texW / 2,
+            texH / 2,
+          );
+        }
+      };
+
       let last = 0,
         elapsed = 0;
       const draw = (time: number) => {
         if (cancelled) return;
-        const visible =
-          !document.hidden && canvas.getBoundingClientRect().width > 0;
-        if (visible && time - last > 40) {
+        const box = canvas.getBoundingClientRect();
+        const visible = !document.hidden && box.width > 0 && box.height > 0;
+        if (visible && (time - last > 40 || last === 0)) {
           elapsed += motion.matches ? 0 : Math.min(time - last, 80);
           last = time;
-          const box = canvas.getBoundingClientRect();
-          canvas.width = Math.max(1, Math.round(box.width));
-          canvas.height = Math.max(1, Math.round(box.height));
+          const w = Math.max(1, Math.round(box.width));
+          const h = Math.max(1, Math.round(box.height));
+          if (canvas.width !== w || canvas.height !== h) {
+            canvas.width = w;
+            canvas.height = h;
+          }
           gl.viewport(0, 0, canvas.width, canvas.height);
+          if (parentCanvas && parentCanvas.width > 0 && kind === "glass-nested") {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(
+              gl.TEXTURE_2D,
+              0,
+              gl.RGBA,
+              gl.RGBA,
+              gl.UNSIGNED_BYTE,
+              parentCanvas,
+            );
+          }
+          applyUniforms(canvas.width, canvas.height);
           gl.uniform2f(
             gl.getUniformLocation(program, "u_resolution"),
             canvas.width,
@@ -199,11 +478,13 @@ export function LiquidEffect({ kind, button = false, onRender }: {
         frame = requestAnimationFrame(draw);
       };
       redraw();
+      activeUpdaters.add(redraw);
       motion.addEventListener("change", redraw);
       const resize = new ResizeObserver(redraw);
       resize.observe(canvas);
       const cleanup = dispose;
       dispose = () => {
+        activeUpdaters.delete(redraw);
         resize.disconnect();
         motion.removeEventListener("change", redraw);
         cleanup();
@@ -217,6 +498,18 @@ export function LiquidEffect({ kind, button = false, onRender }: {
       controller.abort();
       dispose();
     };
-  }, [kind, button, onRender]);
-  return <canvas ref={ref} className={`liquid-${kind}`} aria-hidden="true" />;
+  }, [
+    kind,
+    button,
+    shape,
+    warp,
+    customBorderRadius,
+    customTintOpacity,
+    variant,
+    parentCanvas,
+    onRender,
+  ]);
+  const className =
+    kind === "logo" ? "liquid-logo" : "liquid-glass";
+  return <canvas ref={ref} className={className} aria-hidden="true" />;
 }

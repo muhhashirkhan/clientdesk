@@ -20,7 +20,7 @@ export default function AuthLayout({
             <Logo />
           </Link>
           <div>
-            <span className="glass-pill">
+            <span className="glass-pill glass-container glass-container-pill">
               <i /> A CLEARER WAY TO COLLABORATE
             </span>
             <h1>
@@ -32,9 +32,9 @@ export default function AuthLayout({
               One shared space for your next big thing. Keep projects moving,
               feedback clear, and every detail in reach.
             </p>
-            <div className="glass-card">
-              <LiquidEffect kind="glass" />
-              <span className="orbital-icon">
+            <div className="glass-card glass-container">
+              <LiquidEffect kind="glass" shape="rounded" borderRadius={26} tintOpacity={0.22} />
+              <span className="orbital-icon glass-container-circle">
                 <Image className="liquid-logo-fallback" src="/brand/aiquor-metal-symbol.svg" alt="" width={80} height={80} />
                 <LiquidEffect kind="logo" />
               </span>
