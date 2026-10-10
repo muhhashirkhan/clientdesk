@@ -1,0 +1,47 @@
+project_id = "clientdesk"
+
+[db.seed]
+enabled = false
+sql_paths = []
+
+[auth]
+enabled = true
+site_url = "https://aiquor-clientdesk.vercel.app"
+additional_redirect_urls = ["https://aiquor-clientdesk.vercel.app/auth/callback**", "https://aiquor-clientdesk.vercel.app/auth/confirm**", "http://localhost:3012/auth/callback**", "http://localhost:3012/auth/confirm**", "http://127.0.0.1:3012/auth/callback**", "http://127.0.0.1:3012/auth/confirm**"]
+enable_signup = false
+minimum_password_length = 12
+
+[auth.email]
+# Keep the email/password provider enabled; global sign-ups remain disabled.
+enable_signup = true
+enable_confirmations = true
+double_confirm_changes = true
+
+[auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "hello@getaiquor.com"
+sender_name = "Aiquor ClientDesk"
+
+[auth.email.template.invite]
+subject = "Your Aiquor ClientDesk invitation"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.recovery]
+subject = "Reset your ClientDesk password"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.magic_link]
+subject = "Your ClientDesk sign-in link"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.confirmation]
+subject = "Confirm your ClientDesk account"
+content_path = "./supabase/templates/confirmation.html"
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
