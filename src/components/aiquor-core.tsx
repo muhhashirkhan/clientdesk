@@ -14,31 +14,30 @@ interface InteractionState {
   hidden: boolean;
 }
 
-const CORE_VERTEX_SHADER = /* glsl */ `
+/**
+ * Custom GLSL shader for the Internal Faceted Emerald Crystal & Bioluminescent Chamber.
+ * Rendered in the opaque pass so Three.js's physical transmission buffer refracts
+ * and magnifies it through the outer Crowned Black Optical Glass Monolith.
+ */
+const CRYSTAL_CHAMBER_VERTEX_SHADER = /* glsl */ `
   varying vec3 vNormal;
-  varying vec3 vPosition;
+  varying vec3 vLocalPos;
   varying vec3 vViewPosition;
   uniform float uTime;
   uniform float uFocus;
 
   void main() {
     vNormal = normalize(normalMatrix * normal);
-    vec3 displaced = position;
-    float pulse = sin(position.x * 4.5 + uTime * 2.2) *
-                  cos(position.y * 4.5 - uTime * 1.8) *
-                  sin(position.z * 4.5 + uTime * 1.5);
-    displaced += normal * pulse * (0.04 + uFocus * 0.03);
-    vPosition = displaced;
-
-    vec4 mvPosition = modelViewMatrix * vec4(displaced, 1.0);
+    vLocalPos = position;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     vViewPosition = -mvPosition.xyz;
     gl_Position = projectionMatrix * mvPosition;
   }
 `;
 
-const CORE_FRAGMENT_SHADER = /* glsl */ `
+const CRYSTAL_CHAMBER_FRAGMENT_SHADER = /* glsl */ `
   varying vec3 vNormal;
-  varying vec3 vPosition;
+  varying vec3 vLocalPos;
   varying vec3 vViewPosition;
   uniform float uTime;
   uniform float uFocus;
@@ -47,101 +46,44 @@ const CORE_FRAGMENT_SHADER = /* glsl */ `
   void main() {
     vec3 normal = normalize(vNormal);
     vec3 viewDir = normalize(vViewPosition);
-    float fresnel = pow(1.0 - abs(dot(normal, viewDir)), 2.1);
+    float ndotv = clamp(abs(dot(normal, viewDir)), 0.0, 1.0);
+    float fresnel = pow(1.0 - ndotv, 1.75);
 
-    // Internal flowing energy veins across the singularity
-    float wave1 = sin(vPosition.x * 7.5 + vPosition.y * 5.5 + uTime * 2.2 + uPointer.x * 1.8);
-    float wave2 = cos(vPosition.z * 8.0 - vPosition.y * 6.0 - uTime * 1.8 + uPointer.y * 1.8);
-    float wave3 = sin((vPosition.x - vPosition.z) * 6.0 + uTime * 2.6);
-    float vein = smoothstep(0.18, 0.88, (wave1 * wave2 + wave3 * 0.35) * 0.5 + 0.5);
+    // Studio facet lighting across the cut emerald crystal planes
+    vec3 keyDir = normalize(vec3(-0.52 + uPointer.x * 0.25, 0.72 + uPointer.y * 0.25, 0.85));
+    vec3 rimDir = normalize(vec3(0.68, -0.42, 0.58));
+    float diffKey = max(dot(normal, keyDir), 0.0);
+    float diffRim = max(dot(normal, rimDir), 0.0);
+    float specKey = pow(max(dot(normal, normalize(keyDir + viewDir)), 0.0), 28.0);
+    float specRim = pow(max(dot(normal, normalize(rimDir + viewDir)), 0.0), 16.0);
 
-    vec3 deepForest = vec3(0.03, 0.13, 0.09);
-    vec3 emerald = vec3(0.141, 0.898, 0.627); // #24E5A0
-    vec3 lime = vec3(0.835, 0.969, 0.647);    // #D5F7A5
+    // Internal laminar bioluminescent energy veins flowing vertically through the crystal
+    float veinA = sin(vLocalPos.y * 8.0 - uTime * 1.4 + vLocalPos.x * 7.0 + uPointer.x * 0.9);
+    float veinB = cos(vLocalPos.y * 5.5 + uTime * 0.95 - vLocalPos.z * 6.5 + uPointer.y * 0.9);
+    float vein = smoothstep(0.22, 0.88, veinA * veinB * 0.5 + 0.5);
 
-    vec3 color = mix(deepForest, emerald, 0.38 + vein * (0.58 + uFocus * 0.22));
-    color = mix(color, lime, pow(vein, 2.6) * 0.55 + fresnel * (0.76 + uFocus * 0.2));
+    // Concentrated vertical plasma filament down the central axis of the crystal
+    float radialDist = length(vLocalPos.xz);
+    float centralCore = smoothstep(0.16, 0.02, radialDist) * smoothstep(0.62, 0.08, abs(vLocalPos.y));
+    float axialPulse = 0.82 + 0.18 * sin(vLocalPos.y * 5.0 - uTime * 2.1);
 
-    float alpha = 0.88 + fresnel * 0.12;
-    gl_FragColor = vec4(color, alpha);
+    vec3 darkObsidianEmerald = vec3(0.02, 0.09, 0.065);
+    vec3 deepEmerald = vec3(0.045, 0.32, 0.21);
+    vec3 brightEmerald = vec3(0.141, 0.898, 0.627); // #24E5A0
+    vec3 warmLime = vec3(0.835, 0.969, 0.647);      // #D5F7A5
+
+    float energyBoost = 0.95 + uFocus * 0.35;
+    vec3 color = mix(darkObsidianEmerald, deepEmerald, 0.35 + diffKey * 0.45 + diffRim * 0.25);
+    color = mix(color, brightEmerald, (vein * 0.58 + fresnel * 0.52 + centralCore * 0.65) * energyBoost);
+    color = mix(color, warmLime, (centralCore * axialPulse * 0.72 + pow(vein, 2.2) * 0.38) * energyBoost);
+    color += warmLime * (specKey * 0.85);
+    color += brightEmerald * (specRim * 0.6);
+
+    gl_FragColor = vec4(color, 1.0);
   }
 `;
 
-const GLASS_VERTEX_SHADER = /* glsl */ `
-  varying vec3 vNormal;
-  varying vec3 vWorldPosition;
-  varying vec3 vViewPosition;
-  varying vec3 vLocalPosition;
-
-  void main() {
-    vLocalPosition = position;
-    vNormal = normalize(normalMatrix * normal);
-    vec4 worldPos = modelMatrix * vec4(position, 1.0);
-    vWorldPosition = worldPos.xyz;
-    vec4 mvPosition = viewMatrix * worldPos;
-    vViewPosition = -mvPosition.xyz;
-    gl_Position = projectionMatrix * mvPosition;
-  }
-`;
-
-const GLASS_FRAGMENT_SHADER = /* glsl */ `
-  varying vec3 vNormal;
-  varying vec3 vWorldPosition;
-  varying vec3 vViewPosition;
-  varying vec3 vLocalPosition;
-  uniform float uTime;
-  uniform float uFocus;
-  uniform vec2 uPointer;
-  uniform float uShellLayer;
-
-  void main() {
-    vec3 normal = normalize(vNormal);
-    vec3 viewDir = normalize(vViewPosition);
-
-    // Double-sided normal alignment for crystal facets
-    if (!gl_FrontFacing) {
-      normal = -normal;
-    }
-
-    float ndotv = clamp( abs(dot(normal, viewDir)), 0.0, 1.0 );
-    float fresnel = pow(1.0 - ndotv, 2.6);
-
-    // Virtual studio area lights for controlled obsidian crystal reflections
-    vec3 keyLightDir = normalize(vec3(-0.6 + uPointer.x * 0.35, 0.75 + uPointer.y * 0.3, 0.85));
-    vec3 rimLightDir = normalize(vec3(0.7, -0.65, 0.45));
-
-    vec3 halfKey = normalize(keyLightDir + viewDir);
-    vec3 halfRim = normalize(rimLightDir + viewDir);
-
-    float specKey = pow(max(dot(normal, halfKey), 0.0), 42.0);
-    float specRim = pow(max(dot(normal, halfRim), 0.0), 24.0);
-
-    // Internal subsurface caustics & emerald energy refraction through the glass
-    float causticWave = sin(vLocalPosition.x * 5.2 - vLocalPosition.y * 4.4 + uTime * 1.9) *
-                        cos(vLocalPosition.z * 5.6 + uTime * 1.5);
-    float caustic = smoothstep(0.25, 0.95, causticWave * 0.5 + 0.5);
-
-    vec3 obsidianBase = vec3(0.024, 0.055, 0.043); // #060E0B
-    vec3 forestTint = vec3(0.063, 0.165, 0.125);   // #102A20
-    vec3 emerald = vec3(0.141, 0.898, 0.627);      // #24E5A0
-    vec3 lime = vec3(0.835, 0.969, 0.647);         // #D5F7A5
-
-    vec3 color = mix(obsidianBase, forestTint, 0.45 + caustic * 0.35);
-    color += emerald * (caustic * (0.24 + uFocus * 0.16) * uShellLayer);
-    color = mix(color, emerald, fresnel * (0.58 + uFocus * 0.2));
-    color += lime * (specKey * 0.52 + fresnel * 0.22);
-    color += emerald * (specRim * 0.36);
-
-    // Translucent center so the inner singularity & energy veins shine through clearly,
-    // with denser refractive edge thickness at grazing angles
-    float baseAlpha = mix(0.16, 0.24, uShellLayer);
-    float alpha = clamp(baseAlpha + fresnel * 0.52 + specKey * 0.35 + caustic * 0.08, 0.14, 0.78);
-
-    gl_FragColor = vec4(color, alpha);
-  }
-`;
-
-const CONDUIT_VERTEX_SHADER = /* glsl */ `
+const SEAM_VERTEX_SHADER = /* glsl */ `
   varying vec2 vUv;
   void main() {
     vUv = uv;
@@ -149,88 +91,25 @@ const CONDUIT_VERTEX_SHADER = /* glsl */ `
   }
 `;
 
-const CONDUIT_FRAGMENT_SHADER = /* glsl */ `
+const SEAM_FRAGMENT_SHADER = /* glsl */ `
   varying vec2 vUv;
   uniform float uTime;
   uniform float uFocus;
 
   void main() {
-    float angle = fract(vUv.x - uTime * (0.18 + uFocus * 0.08));
-    float head1 = smoothstep(0.0, 0.22, angle) * (1.0 - smoothstep(0.22, 0.28, angle));
-    float head2 = smoothstep(0.5, 0.72, angle) * (1.0 - smoothstep(0.72, 0.78, angle));
-    float energy = max(head1, head2 * 0.75);
+    float phase = fract(vUv.x - uTime * (0.07 + uFocus * 0.035));
+    float pulseA = smoothstep(0.0, 0.22, phase) * (1.0 - smoothstep(0.22, 0.38, phase));
+    float pulseB = smoothstep(0.5, 0.72, phase) * (1.0 - smoothstep(0.72, 0.88, phase));
+    float intensity = max(pulseA, pulseB * 0.75);
 
-    vec3 baseTitanium = vec3(0.16, 0.28, 0.22);
+    vec3 baseSubtle = vec3(0.06, 0.28, 0.19);
     vec3 emerald = vec3(0.141, 0.898, 0.627);
     vec3 lime = vec3(0.835, 0.969, 0.647);
 
-    vec3 col = mix(baseTitanium, emerald, energy);
-    col = mix(col, lime, pow(energy, 2.5) * 0.88);
-    float alpha = 0.34 + energy * (0.62 + uFocus * 0.15);
+    vec3 col = mix(baseSubtle, emerald, 0.45 + intensity * (0.55 + uFocus * 0.2));
+    col = mix(col, lime, pow(intensity, 2.0) * 0.75);
 
-    gl_FragColor = vec4(col, alpha);
-  }
-`;
-
-const PARTICLE_VERTEX_SHADER = /* glsl */ `
-  attribute float aScale;
-  attribute float aPhase;
-  attribute float aSpeed;
-  attribute float aOrbitRadius;
-  uniform float uTime;
-  uniform vec2 uPointer;
-  uniform float uFocus;
-  varying float vAlpha;
-  varying float vMix;
-
-  void main() {
-    float t = uTime * aSpeed + aPhase;
-    vec3 pos = position;
-
-    // Intentional orbital drift around the core axis
-    float cosT = cos(t * 0.45);
-    float sinT = sin(t * 0.45);
-    vec3 rotated = vec3(
-      pos.x * cosT - pos.z * sinT,
-      pos.y + sin(t * 1.4 + aPhase) * 0.14,
-      pos.x * sinT + pos.z * cosT
-    );
-
-    // Subtle pointer field response
-    vec2 pointerOffset = uPointer * vec2(0.28, 0.22) * (1.0 / (0.6 + aOrbitRadius * 0.35));
-    rotated.x += pointerOffset.x;
-    rotated.y += pointerOffset.y;
-
-    // Slight radial contraction on password focus
-    float focusScale = 1.0 - uFocus * 0.05;
-    rotated *= focusScale;
-
-    vec4 mvPosition = modelViewMatrix * vec4(rotated, 1.0);
-    gl_Position = projectionMatrix * mvPosition;
-
-    float distAttenuation = 28.0 / max(1.0, -mvPosition.z);
-    gl_PointSize = clamp(aScale * distAttenuation, 1.5, 6.5);
-
-    vAlpha = (0.34 + 0.5 * (0.5 + 0.5 * sin(uTime * 1.8 + aPhase))) * (0.85 + uFocus * 0.15);
-    vMix = fract(aPhase * 0.3183);
-  }
-`;
-
-const PARTICLE_FRAGMENT_SHADER = /* glsl */ `
-  varying float vAlpha;
-  varying float vMix;
-
-  void main() {
-    vec2 uv = gl_PointCoord - vec2(0.5);
-    float d = length(uv);
-    if (d > 0.5) discard;
-
-    float softCircle = pow(1.0 - d * 2.0, 1.8);
-    vec3 emerald = vec3(0.141, 0.898, 0.627);
-    vec3 lime = vec3(0.835, 0.969, 0.647);
-    vec3 color = mix(emerald, lime, vMix);
-
-    gl_FragColor = vec4(color, softCircle * vAlpha);
+    gl_FragColor = vec4(col, 1.0);
   }
 `;
 
@@ -245,31 +124,282 @@ const initialInteraction: InteractionState = {
 
 const interactionState: InteractionState = { ...initialInteraction };
 
-function KineticSculpture({ compact }: { compact: boolean }) {
-  const viewport = useThree((state) => state.viewport);
-  const rootGroup = useRef<THREE.Group>(null);
-  const outerGlassRef = useRef<THREE.Mesh>(null);
-  const innerGlassRef = useRef<THREE.Mesh>(null);
-  const energyHeartRef = useRef<THREE.Mesh>(null);
-  const veinCageRef = useRef<THREE.LineSegments>(null);
-  const orbit1Ref = useRef<THREE.Group>(null);
-  const orbit2Ref = useRef<THREE.Group>(null);
-  const orbit3Ref = useRef<THREE.Group>(null);
+/**
+ * Generates a high-contrast dark luxury product studio environment map via PMREMGenerator.
+ * Combines a dark obsidian studio dome with crisp neutral platinum key softboxes (for
+ * authentic dark brushed titanium reflections) and a single emerald rim strip light.
+ */
+function createStudioEnvironment(gl: THREE.WebGLRenderer): THREE.Texture {
+  const pmremGenerator = new THREE.PMREMGenerator(gl);
+  pmremGenerator.compileEquirectangularShader();
 
-  const coreMatRef = useRef<THREE.ShaderMaterial>(null);
-  const innerGlassMatRef = useRef<THREE.ShaderMaterial>(null);
-  const outerGlassMatRef = useRef<THREE.ShaderMaterial>(null);
-  const conduitMatRef = useRef<THREE.ShaderMaterial>(null);
-  const particleMatRef = useRef<THREE.ShaderMaterial>(null);
+  const envScene = new THREE.Scene();
+  envScene.background = new THREE.Color("#030605");
+
+  const domeGeo = new THREE.SphereGeometry(14, 32, 24);
+  const posAttr = domeGeo.attributes.position;
+  const colors = new Float32Array(posAttr.count * 3);
+  const cTop = new THREE.Color("#111917");
+  const cHorizon = new THREE.Color("#070c0a");
+  const cBottom = new THREE.Color("#020403");
+  const tmpColor = new THREE.Color();
+
+  for (let i = 0; i < posAttr.count; i++) {
+    const ny = posAttr.getY(i) / 14;
+    if (ny >= 0) {
+      tmpColor.copy(cHorizon).lerp(cTop, Math.pow(ny, 0.85));
+    } else {
+      tmpColor.copy(cHorizon).lerp(cBottom, Math.pow(-ny, 0.85));
+    }
+    colors[i * 3] = tmpColor.r;
+    colors[i * 3 + 1] = tmpColor.g;
+    colors[i * 3 + 2] = tmpColor.b;
+  }
+  domeGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  const domeMat = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    side: THREE.BackSide,
+  });
+  envScene.add(new THREE.Mesh(domeGeo, domeMat));
+
+  const panelGeo = new THREE.PlaneGeometry(1, 1);
+
+  // 1. Primary Key Softbox Bank (top-left front — crisp studio platinum white)
+  const keyMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color("#f2f7f5"),
+    side: THREE.DoubleSide,
+  });
+  const keyPanel = new THREE.Mesh(panelGeo, keyMat);
+  keyPanel.position.set(-4.2, 4.8, 4.6);
+  keyPanel.scale.set(5.2, 3.4, 1);
+  keyPanel.lookAt(0, 0, 0);
+  envScene.add(keyPanel);
+
+  // 2. Vertical Architectural Strip Light (left flank — cool silver-slate)
+  const sideMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color("#b8c9c3"),
+    side: THREE.DoubleSide,
+  });
+  const sidePanel = new THREE.Mesh(panelGeo, sideMat);
+  sidePanel.position.set(-6.0, 0.4, 2.8);
+  sidePanel.scale.set(1.8, 7.5, 1);
+  sidePanel.lookAt(0, 0, 0);
+  envScene.add(sidePanel);
+
+  // 3. Emerald Rim Softbox Bank (right-rear grazing — signature emerald rim reflection)
+  const rimMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color("#10b981"),
+    side: THREE.DoubleSide,
+  });
+  const rimPanel = new THREE.Mesh(panelGeo, rimMat);
+  rimPanel.position.set(5.6, -1.4, 2.6);
+  rimPanel.scale.set(3.2, 7.2, 1);
+  rimPanel.lookAt(0, 0, 0);
+  envScene.add(rimPanel);
+
+  // 4. Overhead Crown Reflector (cool titanium highlight)
+  const crownMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color("#dce8e3"),
+    side: THREE.DoubleSide,
+  });
+  const crownPanel = new THREE.Mesh(panelGeo, crownMat);
+  crownPanel.position.set(2.2, 6.4, 1.8);
+  crownPanel.scale.set(4.4, 2.4, 1);
+  crownPanel.lookAt(0, 0, 0);
+  envScene.add(crownPanel);
+
+  // 5. Subtle Lower Studio Bounce Card
+  const fillMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color("#162821"),
+    side: THREE.DoubleSide,
+  });
+  const fillPanel = new THREE.Mesh(panelGeo, fillMat);
+  fillPanel.position.set(0, -6.2, 2.2);
+  fillPanel.scale.set(6.5, 3.8, 1);
+  fillPanel.lookAt(0, 0, 0);
+  envScene.add(fillPanel);
+
+  const renderTarget = pmremGenerator.fromScene(envScene, 0.03);
+
+  domeGeo.dispose();
+  domeMat.dispose();
+  panelGeo.dispose();
+  keyMat.dispose();
+  sideMat.dispose();
+  rimMat.dispose();
+  crownMat.dispose();
+  fillMat.dispose();
+  pmremGenerator.dispose();
+
+  return renderTarget.texture;
+}
+
+/**
+ * Base 10-vertex crowned octagonal cross-section in the XZ plane (counter-clockwise).
+ * Features a central front/back vertical prism ridge (z = ±0.34) and 45-degree corner
+ * chamfers so adjacent crystal facets have distinct 3D surface normals.
+ */
+const MONOLITH_RING_TEMPLATE: [number, number][] = [
+  [0.0, 0.34], // 0: Front central vertical ridge
+  [0.32, 0.24], // 1: Front-right facet shoulder
+  [0.45, 0.1], // 2: Right-front chamfer edge
+  [0.45, -0.1], // 3: Right-back chamfer edge
+  [0.32, -0.24], // 4: Back-right facet shoulder
+  [0.0, -0.34], // 5: Back central vertical ridge
+  [-0.32, -0.24], // 6: Back-left facet shoulder
+  [-0.45, -0.1], // 7: Left-back chamfer edge
+  [-0.45, 0.1], // 8: Left-front chamfer edge
+  [-0.32, 0.24], // 9: Front-left facet shoulder
+];
+
+interface LoftedSlice {
+  y: number;
+  sx: number;
+  sz: number;
+}
+
+/**
+ * Lofts a faceted 3D prism from horizontal cross-section slices with crisp facet normals and UVs.
+ */
+function buildLoftedPrismGeometry(slices: LoftedSlice[]): THREE.BufferGeometry {
+  const ringLen = MONOLITH_RING_TEMPLATE.length;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const minY = slices[0].y;
+  const maxY = slices[slices.length - 1].y;
+  const heightSpan = Math.max(0.001, maxY - minY);
+
+  const getVertex = (sliceIdx: number, ptIdx: number): [number, number, number] => {
+    const s = slices[sliceIdx];
+    const [bx, bz] = MONOLITH_RING_TEMPLATE[ptIdx % ringLen];
+    return [bx * s.sx, s.y, bz * s.sz];
+  };
+
+  const pushTri = (
+    a: [number, number, number],
+    b: [number, number, number],
+    c: [number, number, number],
+    uvA: [number, number],
+    uvB: [number, number],
+    uvC: [number, number],
+  ) => {
+    positions.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+    uvs.push(uvA[0], uvA[1], uvB[0], uvB[1], uvC[0], uvC[1]);
+  };
+
+  // Side facets between consecutive horizontal slices
+  for (let i = 0; i < slices.length - 1; i++) {
+    const v0 = (slices[i].y - minY) / heightSpan;
+    const v1 = (slices[i + 1].y - minY) / heightSpan;
+    for (let j = 0; j < ringLen; j++) {
+      const nextJ = (j + 1) % ringLen;
+      const u0 = j / ringLen;
+      const u1 = (j + 1) / ringLen;
+      const p00 = getVertex(i, j);
+      const p10 = getVertex(i, nextJ);
+      const p11 = getVertex(i + 1, nextJ);
+      const p01 = getVertex(i + 1, j);
+      pushTri(p00, p10, p11, [u0, v0], [u1, v0], [u1, v1]);
+      pushTri(p00, p11, p01, [u0, v0], [u1, v1], [u0, v1]);
+    }
+  }
+
+  // Bottom cap (fan from center of slice 0)
+  const bottomCenter: [number, number, number] = [0, slices[0].y, 0];
+  for (let j = 0; j < ringLen; j++) {
+    const p0 = getVertex(0, (j + 1) % ringLen);
+    const p1 = getVertex(0, j);
+    pushTri(bottomCenter, p0, p1, [0.5, 0.5], [1, 0], [0, 0]);
+  }
+
+  // Top cap (fan from center of last slice)
+  const lastIdx = slices.length - 1;
+  const topCenter: [number, number, number] = [0, slices[lastIdx].y, 0];
+  for (let j = 0; j < ringLen; j++) {
+    const p0 = getVertex(lastIdx, j);
+    const p1 = getVertex(lastIdx, (j + 1) % ringLen);
+    pushTri(topCenter, p0, p1, [0.5, 0.5], [0, 1], [1, 1]);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Helper to create a 2D chamfered rectangular/octagonal profile shape.
+ */
+function createChamferedRectShape(width: number, height: number, chamfer: number): THREE.Shape {
+  const hw = width / 2;
+  const hh = height / 2;
+  const c = Math.min(chamfer, hw * 0.45, hh * 0.45);
+  const shape = new THREE.Shape();
+  shape.moveTo(-hw + c, -hh);
+  shape.lineTo(hw - c, -hh);
+  shape.lineTo(hw, -hh + c);
+  shape.lineTo(hw, hh - c);
+  shape.lineTo(hw - c, hh);
+  shape.lineTo(-hw + c, hh);
+  shape.lineTo(-hw, hh - c);
+  shape.lineTo(-hw, -hh + c);
+  shape.closePath();
+  return shape;
+}
+
+/**
+ * Helper to create a machined beveled ring cross-section for LatheGeometry.
+ */
+function createBeveledRingPoints(
+  innerR: number,
+  outerR: number,
+  halfHeight: number,
+  chamfer: number,
+): THREE.Vector2[] {
+  const c = Math.min(chamfer, (outerR - innerR) * 0.3, halfHeight * 0.4);
+  return [
+    new THREE.Vector2(innerR + c, -halfHeight),
+    new THREE.Vector2(outerR - c, -halfHeight),
+    new THREE.Vector2(outerR, -halfHeight + c),
+    new THREE.Vector2(outerR, halfHeight - c),
+    new THREE.Vector2(outerR - c, halfHeight),
+    new THREE.Vector2(innerR + c, halfHeight),
+    new THREE.Vector2(innerR, halfHeight - c),
+    new THREE.Vector2(innerR, -halfHeight + c),
+    new THREE.Vector2(innerR + c, -halfHeight),
+  ];
+}
+
+function KineticSculpture({ compact }: { compact: boolean }) {
+  const gl = useThree((state) => state.gl);
+  const viewport = useThree((state) => state.viewport);
+
+  const rootGroup = useRef<THREE.Group>(null);
+  const monolithGroupRef = useRef<THREE.Group>(null);
+  const crystalGroupRef = useRef<THREE.Group>(null);
+  const primaryOrbitRef = useRef<THREE.Group>(null);
+  const secondaryArcRef = useRef<THREE.Group>(null);
+  const internalLightRef = useRef<THREE.PointLight>(null);
+
+  const chamberMatRef = useRef<THREE.ShaderMaterial>(null);
+  const seamMatRef = useRef<THREE.ShaderMaterial>(null);
 
   const smoothState = useRef({
     px: 0,
     py: 0,
     focus: 0,
-    hover: 0,
   });
 
-  const coreUniforms = useMemo(
+  const envMap = useMemo(() => createStudioEnvironment(gl), [gl]);
+
+  useEffect(() => {
+    return () => {
+      envMap.dispose();
+    };
+  }, [envMap]);
+
+  const chamberUniforms = useMemo(
     () => ({
       uTime: { value: 0 },
       uFocus: { value: 0 },
@@ -278,27 +408,7 @@ function KineticSculpture({ compact }: { compact: boolean }) {
     [],
   );
 
-  const innerGlassUniforms = useMemo(
-    () => ({
-      uTime: { value: 0 },
-      uFocus: { value: 0 },
-      uPointer: { value: new THREE.Vector2(0, 0) },
-      uShellLayer: { value: 1.0 },
-    }),
-    [],
-  );
-
-  const outerGlassUniforms = useMemo(
-    () => ({
-      uTime: { value: 0 },
-      uFocus: { value: 0 },
-      uPointer: { value: new THREE.Vector2(0, 0) },
-      uShellLayer: { value: 0.45 },
-    }),
-    [],
-  );
-
-  const conduitUniforms = useMemo(
+  const seamUniforms = useMemo(
     () => ({
       uTime: { value: 0 },
       uFocus: { value: 0 },
@@ -306,126 +416,127 @@ function KineticSculpture({ compact }: { compact: boolean }) {
     [],
   );
 
-  const particleUniforms = useMemo(
-    () => ({
-      uTime: { value: 0 },
-      uPointer: { value: new THREE.Vector2(0, 0) },
-      uFocus: { value: 0 },
-    }),
-    [],
-  );
-
-  // Geometries with proper disposal
+  // Precision Procedural Geometries
   const geometries = useMemo(() => {
-    const outerOcta = new THREE.OctahedronGeometry(1.16, 0);
-    const outerEdges = new THREE.EdgesGeometry(outerOcta);
+    // 1A. Outer Monolith — Crowned Multi-Faceted Black Optical Glass Obelisk
+    // Straight, unbroken vertical prism faces between y = -0.68 and y = +0.68 with
+    // precision 45° top/bottom crown bevels.
+    const monolithGlassGeo = buildLoftedPrismGeometry([
+      { y: -0.84, sx: 0.64, sz: 0.64 },
+      { y: -0.76, sx: 0.86, sz: 0.86 },
+      { y: -0.66, sx: 0.96, sz: 0.96 },
+      { y: 0.66, sx: 0.96, sz: 0.96 },
+      { y: 0.76, sx: 0.86, sz: 0.86 },
+      { y: 0.84, sx: 0.64, sz: 0.64 },
+    ]);
 
-    const innerDodeca = new THREE.DodecahedronGeometry(0.9, 0);
-    const innerEdges = new THREE.EdgesGeometry(innerDodeca);
+    // 1B. Precision-Machined Titanium Crown & Base End-Caps (matched to monolith profile)
+    const crownCapGeo = buildLoftedPrismGeometry([
+      { y: 0.76, sx: 0.88, sz: 0.88 },
+      { y: 0.82, sx: 0.9, sz: 0.9 },
+      { y: 0.9, sx: 0.74, sz: 0.74 },
+      { y: 0.95, sx: 0.54, sz: 0.54 },
+    ]);
 
-    const veinIcosa = new THREE.IcosahedronGeometry(0.68, 1);
-    const veinEdges = new THREE.EdgesGeometry(veinIcosa);
-    veinIcosa.dispose();
+    const baseCapGeo = buildLoftedPrismGeometry([
+      { y: -0.95, sx: 0.54, sz: 0.54 },
+      { y: -0.9, sx: 0.74, sz: 0.74 },
+      { y: -0.82, sx: 0.9, sz: 0.9 },
+      { y: -0.76, sx: 0.88, sz: 0.88 },
+    ]);
 
-    const coreIcosa = new THREE.IcosahedronGeometry(0.46, 3);
+    // 1C. Lateral Titanium Structural Clamps (left & right spines of the monolith)
+    const spineShape = createChamferedRectShape(0.08, 0.92, 0.024);
+    const spineGeo = new THREE.ExtrudeGeometry(spineShape, {
+      depth: 0.24,
+      bevelEnabled: true,
+      bevelThickness: 0.022,
+      bevelSize: 0.018,
+      bevelSegments: 3,
+    });
+    spineGeo.center();
+    spineGeo.computeVertexNormals();
 
-    // Orbit 1: Primary Machined Titanium Gimbal Ring + 6 Calibration Nodes
-    const orbit1Torus = new THREE.TorusGeometry(1.58, 0.015, 16, 120);
-    const nodeGeo = new THREE.CylinderGeometry(0.024, 0.024, 0.11, 12);
+    // 2A. Internal Faceted Emerald Crystal Resonator (8-sided gem-cut bipyramid column)
+    // Sized so there is a clear peripheral margin of dark smoked obsidian glass around it.
+    const crystalPoints = [
+      new THREE.Vector2(0.001, -0.62),
+      new THREE.Vector2(0.17, -0.44),
+      new THREE.Vector2(0.22, -0.18),
+      new THREE.Vector2(0.22, 0.18),
+      new THREE.Vector2(0.17, 0.44),
+      new THREE.Vector2(0.001, 0.62),
+    ];
+    const innerCrystalRaw = new THREE.LatheGeometry(crystalPoints, 8);
+    const innerCrystalGeo = innerCrystalRaw.toNonIndexed();
+    innerCrystalRaw.dispose();
+    innerCrystalGeo.computeVertexNormals();
 
-    // Orbit 2: Elliptical Emerald Energy Conduit
-    const orbit2Torus = new THREE.TorusGeometry(1.9, 0.012, 12, 128);
+    // 2B. Internal Titanium Emitter Sockets (positioned at the top & bottom of the crystal chamber)
+    const collarPoints = createBeveledRingPoints(0.16, 0.28, 0.036, 0.009);
+    const collarGeo = new THREE.LatheGeometry(collarPoints, 48);
+    collarGeo.computeVertexNormals();
 
-    // Orbit 3: Precision 72-Tick Telemetry Dial Ring
-    const tickPositions: number[] = [];
-    const tickCount = 72;
-    const dialRadius = 2.18;
-    for (let i = 0; i < tickCount; i++) {
-      const theta = (i / tickCount) * Math.PI * 2;
-      const isMajor = i % 6 === 0;
-      const innerR = dialRadius - (isMajor ? 0.075 : 0.035);
-      const outerR = dialRadius + (isMajor ? 0.035 : 0.015);
-      tickPositions.push(
-        Math.cos(theta) * innerR,
-        Math.sin(theta) * innerR,
-        0,
-        Math.cos(theta) * outerR,
-        Math.sin(theta) * outerR,
-        0,
-      );
-    }
-    const dialTicksGeo = new THREE.BufferGeometry();
-    dialTicksGeo.setAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(tickPositions, 3),
+    // 3A. Primary Dominant Orbital Mechanism — Machined Titanium Gimbal Ring
+    const orbitProfile = createBeveledRingPoints(1.46, 1.65, 0.055, 0.018);
+    const primaryOrbitGeo = new THREE.LatheGeometry(orbitProfile, compact ? 96 : 128);
+    primaryOrbitGeo.rotateX(Math.PI / 2);
+    primaryOrbitGeo.computeVertexNormals();
+
+    // 3B. Recessed Inner Emerald Optical Seam on the Primary Gimbal
+    const orbitSeamGeo = new THREE.TorusGeometry(1.455, 0.011, 12, compact ? 96 : 128);
+
+    // 3C. Machined Titanium Trunnion Mounts on the Primary Gimbal
+    const mountShape = createChamferedRectShape(0.15, 0.25, 0.038);
+    const mountGeo = new THREE.ExtrudeGeometry(mountShape, {
+      depth: 0.15,
+      bevelEnabled: true,
+      bevelThickness: 0.022,
+      bevelSize: 0.022,
+      bevelSegments: 3,
+    });
+    mountGeo.center();
+    mountGeo.computeVertexNormals();
+
+    // 4. Secondary Asymmetric 210° Titanium Counter-Arc
+    const arcProfile = createBeveledRingPoints(1.2, 1.3, 0.034, 0.011);
+    const secondaryArcGeo = new THREE.LatheGeometry(
+      arcProfile,
+      compact ? 64 : 88,
+      0,
+      Math.PI * 1.18,
     );
-
-    // Particle Field Geometry
-    const particleCount = compact ? 54 : 108;
-    const pPositions = new Float32Array(particleCount * 3);
-    const pScales = new Float32Array(particleCount);
-    const pPhases = new Float32Array(particleCount);
-    const pSpeeds = new Float32Array(particleCount);
-    const pRadii = new Float32Array(particleCount);
-
-    for (let i = 0; i < particleCount; i++) {
-      const ratio = i / particleCount;
-      const goldenAngle = i * 2.399963229728653;
-      const radius = 1.32 + Math.pow(ratio, 0.85) * 1.75;
-      const ySpread = (Math.sin(i * 1.73) * 0.82 + Math.cos(i * 0.91) * 0.42) * 1.05;
-
-      pPositions[i * 3] = Math.cos(goldenAngle) * radius;
-      pPositions[i * 3 + 1] = ySpread;
-      pPositions[i * 3 + 2] = Math.sin(goldenAngle) * radius;
-
-      pScales[i] = 1.7 + (i % 5) * 0.65;
-      pPhases[i] = (i * 0.785398) % (Math.PI * 2);
-      pSpeeds[i] = 0.25 + (i % 7) * 0.06;
-      pRadii[i] = radius;
-    }
-
-    const particlesGeo = new THREE.BufferGeometry();
-    particlesGeo.setAttribute("position", new THREE.BufferAttribute(pPositions, 3));
-    particlesGeo.setAttribute("aScale", new THREE.BufferAttribute(pScales, 1));
-    particlesGeo.setAttribute("aPhase", new THREE.BufferAttribute(pPhases, 1));
-    particlesGeo.setAttribute("aSpeed", new THREE.BufferAttribute(pSpeeds, 1));
-    particlesGeo.setAttribute("aOrbitRadius", new THREE.BufferAttribute(pRadii, 1));
+    secondaryArcGeo.rotateX(Math.PI / 2);
+    secondaryArcGeo.computeVertexNormals();
 
     return {
-      outerOcta,
-      outerEdges,
-      innerDodeca,
-      innerEdges,
-      veinEdges,
-      coreIcosa,
-      orbit1Torus,
-      nodeGeo,
-      orbit2Torus,
-      dialTicksGeo,
-      particlesGeo,
+      monolithGlassGeo,
+      crownCapGeo,
+      baseCapGeo,
+      spineGeo,
+      innerCrystalGeo,
+      collarGeo,
+      primaryOrbitGeo,
+      orbitSeamGeo,
+      mountGeo,
+      secondaryArcGeo,
     };
   }, [compact]);
 
   useEffect(() => {
     return () => {
-      geometries.outerOcta.dispose();
-      geometries.outerEdges.dispose();
-      geometries.innerDodeca.dispose();
-      geometries.innerEdges.dispose();
-      geometries.veinEdges.dispose();
-      geometries.coreIcosa.dispose();
-      geometries.orbit1Torus.dispose();
-      geometries.nodeGeo.dispose();
-      geometries.orbit2Torus.dispose();
-      geometries.dialTicksGeo.dispose();
-      geometries.particlesGeo.dispose();
+      geometries.monolithGlassGeo.dispose();
+      geometries.crownCapGeo.dispose();
+      geometries.baseCapGeo.dispose();
+      geometries.spineGeo.dispose();
+      geometries.innerCrystalGeo.dispose();
+      geometries.collarGeo.dispose();
+      geometries.primaryOrbitGeo.dispose();
+      geometries.orbitSeamGeo.dispose();
+      geometries.mountGeo.dispose();
+      geometries.secondaryArcGeo.dispose();
     };
   }, [geometries]);
-
-  const calibrationAngles = useMemo(
-    () => [0, Math.PI / 3, (2 * Math.PI) / 3, Math.PI, (4 * Math.PI) / 3, (5 * Math.PI) / 3],
-    [],
-  );
 
   useFrame((state, rawDelta) => {
     if (interactionState.hidden) return;
@@ -433,278 +544,339 @@ function KineticSculpture({ compact }: { compact: boolean }) {
     const elapsed = state.clock.getElapsedTime();
 
     const targetFocus =
-      interactionState.focusLevel * 0.45 +
-      interactionState.hoverBoost * 0.35 +
+      interactionState.focusLevel * 0.42 +
+      interactionState.hoverBoost * 0.3 +
       interactionState.pulseSurge;
 
     interactionState.pulseSurge = THREE.MathUtils.damp(
       interactionState.pulseSurge,
       0,
-      3.2,
+      2.8,
       delta,
     );
 
     smoothState.current.px = THREE.MathUtils.damp(
       smoothState.current.px,
       interactionState.pointerX,
-      4.2,
+      3.2,
       delta,
     );
     smoothState.current.py = THREE.MathUtils.damp(
       smoothState.current.py,
       interactionState.pointerY,
-      4.2,
+      3.2,
       delta,
     );
     smoothState.current.focus = THREE.MathUtils.damp(
       smoothState.current.focus,
       targetFocus,
-      3.8,
+      3.0,
       delta,
     );
 
     const { px, py, focus } = smoothState.current;
 
-    if (coreMatRef.current) {
-      coreMatRef.current.uniforms.uTime.value = elapsed;
-      coreMatRef.current.uniforms.uFocus.value = focus;
-      coreMatRef.current.uniforms.uPointer.value.set(px, py);
+    if (chamberMatRef.current) {
+      chamberMatRef.current.uniforms.uTime.value = elapsed;
+      chamberMatRef.current.uniforms.uFocus.value = focus;
+      chamberMatRef.current.uniforms.uPointer.value.set(px, py);
     }
 
-    if (innerGlassMatRef.current) {
-      innerGlassMatRef.current.uniforms.uTime.value = elapsed;
-      innerGlassMatRef.current.uniforms.uFocus.value = focus;
-      innerGlassMatRef.current.uniforms.uPointer.value.set(px, py);
+    if (seamMatRef.current) {
+      seamMatRef.current.uniforms.uTime.value = elapsed;
+      seamMatRef.current.uniforms.uFocus.value = focus;
     }
 
-    if (outerGlassMatRef.current) {
-      outerGlassMatRef.current.uniforms.uTime.value = elapsed;
-      outerGlassMatRef.current.uniforms.uFocus.value = focus;
-      outerGlassMatRef.current.uniforms.uPointer.value.set(px, py);
+    if (internalLightRef.current) {
+      internalLightRef.current.intensity =
+        3.6 + Math.sin(elapsed * 1.6) * 0.4 + focus * 1.5;
     }
 
-    if (conduitMatRef.current) {
-      conduitMatRef.current.uniforms.uTime.value = elapsed;
-      conduitMatRef.current.uniforms.uFocus.value = focus;
-    }
-
-    if (particleMatRef.current) {
-      particleMatRef.current.uniforms.uTime.value = elapsed;
-      particleMatRef.current.uniforms.uFocus.value = focus;
-      particleMatRef.current.uniforms.uPointer.value.set(px, py);
-    }
-
+    // Restrained, expensive-feeling orientation & floating motion
     if (rootGroup.current) {
-      const targetRotY = px * 0.38 + Math.sin(elapsed * 0.35) * 0.08;
-      const targetRotX = -py * 0.28 + Math.cos(elapsed * 0.28) * 0.06 + focus * 0.12;
+      const targetRotY = px * 0.22 + Math.sin(elapsed * 0.25) * 0.06;
+      const targetRotX = -py * 0.16 + Math.cos(elapsed * 0.2) * 0.04 + focus * 0.06;
       rootGroup.current.rotation.y = THREE.MathUtils.damp(
         rootGroup.current.rotation.y,
         targetRotY,
-        4.0,
+        3.2,
         delta,
       );
       rootGroup.current.rotation.x = THREE.MathUtils.damp(
         rootGroup.current.rotation.x,
         targetRotX,
-        4.0,
+        3.2,
         delta,
       );
-      const basePosY = compact ? -0.04 : viewport.height * 0.175;
-      rootGroup.current.position.x = compact ? viewport.width * 0.25 : viewport.width * 0.11;
-      rootGroup.current.position.y = basePosY + Math.sin(elapsed * 0.9) * 0.05;
+      const basePosY = compact ? -0.02 : viewport.height * 0.205;
+      const compactXRatio = viewport.width < 4.6 ? 0.285 : 0.25;
+      rootGroup.current.position.x = compact
+        ? viewport.width * compactXRatio
+        : viewport.width * 0.135;
+      rootGroup.current.position.y = basePosY + Math.sin(elapsed * 0.75) * 0.035;
     }
 
-    const speedMultiplier = 1 + focus * 0.55;
-
-    if (outerGlassRef.current) {
-      outerGlassRef.current.rotation.y += delta * 0.18 * speedMultiplier;
-      outerGlassRef.current.rotation.x += delta * 0.09 * speedMultiplier;
-    }
-    if (innerGlassRef.current) {
-      innerGlassRef.current.rotation.y -= delta * 0.24 * speedMultiplier;
-      innerGlassRef.current.rotation.z += delta * 0.14 * speedMultiplier;
-    }
-    if (veinCageRef.current) {
-      veinCageRef.current.rotation.y += delta * 0.32 * speedMultiplier;
-      veinCageRef.current.rotation.x -= delta * 0.19 * speedMultiplier;
-    }
-    if (energyHeartRef.current) {
-      const heartScale = 1 + Math.sin(elapsed * 2.4) * 0.05 + focus * 0.08;
-      energyHeartRef.current.scale.setScalar(heartScale);
-      energyHeartRef.current.rotation.y += delta * 0.38 * speedMultiplier;
-    }
-
-    if (orbit1Ref.current) {
-      orbit1Ref.current.rotation.z += delta * 0.22 * speedMultiplier;
-      orbit1Ref.current.rotation.x = THREE.MathUtils.damp(
-        orbit1Ref.current.rotation.x,
-        0.58 - focus * 0.18 + py * 0.12,
-        3.5,
+    // Central Monolith: slow, deliberate architectural rotation
+    if (monolithGroupRef.current) {
+      const targetMonolithY =
+        -0.28 + elapsed * 0.1 + px * 0.12 + focus * 0.16;
+      monolithGroupRef.current.rotation.y = THREE.MathUtils.damp(
+        monolithGroupRef.current.rotation.y,
+        targetMonolithY,
+        2.8,
+        delta,
+      );
+      monolithGroupRef.current.rotation.z = THREE.MathUtils.damp(
+        monolithGroupRef.current.rotation.z,
+        0.05 + py * 0.04,
+        2.8,
         delta,
       );
     }
-    if (orbit2Ref.current) {
-      orbit2Ref.current.rotation.z -= delta * 0.31 * speedMultiplier;
-      orbit2Ref.current.rotation.y = THREE.MathUtils.damp(
-        orbit2Ref.current.rotation.y,
-        0.46 + focus * 0.22 + px * 0.14,
-        3.5,
+
+    // Internal Crystal Resonator: gentle counter-rotation inside the chamber
+    if (crystalGroupRef.current) {
+      crystalGroupRef.current.rotation.y = -elapsed * 0.22;
+      const pulseScale = 1 + Math.sin(elapsed * 1.8) * 0.025 + focus * 0.04;
+      crystalGroupRef.current.scale.set(1, pulseScale, 1);
+    }
+
+    // Primary Titanium Gimbal: smooth gyroscopic rotation + focus alignment
+    if (primaryOrbitRef.current) {
+      primaryOrbitRef.current.rotation.z += delta * (0.14 + focus * 0.08);
+      primaryOrbitRef.current.rotation.x = THREE.MathUtils.damp(
+        primaryOrbitRef.current.rotation.x,
+        0.62 - focus * 0.14 + py * 0.08,
+        2.8,
+        delta,
+      );
+      primaryOrbitRef.current.rotation.y = THREE.MathUtils.damp(
+        primaryOrbitRef.current.rotation.y,
+        -0.34 + focus * 0.1 + px * 0.08,
+        2.8,
         delta,
       );
     }
-    if (orbit3Ref.current) {
-      orbit3Ref.current.rotation.z += delta * 0.12 * speedMultiplier;
-      orbit3Ref.current.rotation.x = THREE.MathUtils.damp(
-        orbit3Ref.current.rotation.x,
-        -0.42 + focus * 0.15,
-        3.0,
+
+    // Secondary Asymmetric Counter-Arc: slow mechanical counter-sweep
+    if (secondaryArcRef.current) {
+      secondaryArcRef.current.rotation.z -= delta * (0.09 + focus * 0.05);
+      secondaryArcRef.current.rotation.x = THREE.MathUtils.damp(
+        secondaryArcRef.current.rotation.x,
+        -0.54 + focus * 0.12 - py * 0.06,
+        2.6,
         delta,
       );
     }
   });
 
   const baseScale = compact
-    ? Math.min(0.66, viewport.height * 0.175)
-    : Math.min(0.6, Math.min(viewport.width, viewport.height) * 0.175);
-  const initialX = compact ? viewport.width * 0.25 : viewport.width * 0.11;
-  const initialY = compact ? -0.04 : viewport.height * 0.175;
+    ? Math.min(0.74, viewport.width * 0.142, viewport.height * 0.2)
+    : Math.min(0.65, Math.min(viewport.width, viewport.height) * 0.192);
+  const initialX = compact
+    ? viewport.width * (viewport.width < 4.6 ? 0.285 : 0.25)
+    : viewport.width * 0.135;
+  const initialY = compact ? -0.02 : viewport.height * 0.205;
 
   return (
-    <group
-      ref={rootGroup}
-      scale={baseScale}
-      position={[initialX, initialY, 0]}
-    >
-      <ambientLight intensity={0.65} color="#102b20" />
-      <directionalLight position={[-4, 5, 4]} intensity={2.2} color="#d5f7a5" />
-      <directionalLight position={[4, -3, 3]} intensity={1.4} color="#24e5a0" />
+    <group ref={rootGroup} scale={baseScale} position={[initialX, initialY, 0]}>
+      {/* Cinematic 3-Point Studio Lighting */}
+      <ambientLight intensity={0.5} color="#101815" />
+      {/* Soft Directional Key Light (top-left front — clean studio platinum white) */}
+      <directionalLight position={[-4.8, 6.2, 5.2]} intensity={3.2} color="#f4f8f6" />
+      {/* Cool Titanium Fill Light (left-front) */}
+      <directionalLight position={[-3.2, -1.5, 4.0]} intensity={1.1} color="#9ab0a8" />
+      {/* Emerald Rim Light (right-rear grazing) */}
+      <directionalLight position={[5.2, -3.2, 2.2]} intensity={2.4} color="#10b981" />
+      {/* Internal Chamber Point Light */}
+      <pointLight
+        ref={internalLightRef}
+        position={[0, 0, 0]}
+        intensity={3.6}
+        distance={4.2}
+        decay={1.5}
+        color="#24e5a0"
+      />
 
-      {/* 1. CENTRAL CORE — Inner Bioluminescent Singularity */}
-      <mesh ref={energyHeartRef} geometry={geometries.coreIcosa} renderOrder={1}>
-        <shaderMaterial
-          ref={coreMatRef}
-          vertexShader={CORE_VERTEX_SHADER}
-          fragmentShader={CORE_FRAGMENT_SHADER}
-          transparent
-          uniforms={coreUniforms}
-        />
-      </mesh>
-
-      {/* 1B. CENTRAL CORE — Internal Geodesic Emerald Energy Veins */}
-      <lineSegments ref={veinCageRef} geometry={geometries.veinEdges} renderOrder={2}>
-        <lineBasicMaterial
-          color="#24e5a0"
-          transparent
-          opacity={0.58}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </lineSegments>
-
-      {/* 1C. CENTRAL CORE — Inner Faceted Obsidian Refraction Shell */}
-      <mesh ref={innerGlassRef} geometry={geometries.innerDodeca} renderOrder={3}>
-        <shaderMaterial
-          ref={innerGlassMatRef}
-          vertexShader={GLASS_VERTEX_SHADER}
-          fragmentShader={GLASS_FRAGMENT_SHADER}
-          transparent
-          depthWrite={false}
-          side={THREE.DoubleSide}
-          uniforms={innerGlassUniforms}
-        />
-        <lineSegments geometry={geometries.innerEdges}>
-          <lineBasicMaterial
-            color="#24e5a0"
-            transparent
-            opacity={0.42}
-            depthWrite={false}
-          />
-        </lineSegments>
-      </mesh>
-
-      {/* 1D. CENTRAL CORE — Outer Translucent Obsidian Monolith & Titanium Ribs */}
-      <mesh ref={outerGlassRef} geometry={geometries.outerOcta} renderOrder={4}>
-        <shaderMaterial
-          ref={outerGlassMatRef}
-          vertexShader={GLASS_VERTEX_SHADER}
-          fragmentShader={GLASS_FRAGMENT_SHADER}
-          transparent
-          depthWrite={false}
-          side={THREE.DoubleSide}
-          uniforms={outerGlassUniforms}
-        />
-        <lineSegments geometry={geometries.outerEdges}>
-          <lineBasicMaterial
-            color="#b8d9c9"
-            transparent
-            opacity={0.62}
-            depthWrite={false}
-          />
-        </lineSegments>
-      </mesh>
-
-      {/* 2A. ORBIT 1 — Primary Machined Titanium Gimbal Ring + Calibration Nodes */}
-      <group ref={orbit1Ref} rotation={[0.58, 0.22, 0.14]}>
-        <mesh geometry={geometries.orbit1Torus}>
-          <meshStandardMaterial
-            color="#8ca89b"
-            emissive="#123829"
-            emissiveIntensity={0.35}
-            metalness={0.88}
-            roughness={0.18}
-          />
-        </mesh>
-        {calibrationAngles.map((angle, idx) => (
-          <mesh
-            key={idx}
-            geometry={geometries.nodeGeo}
-            position={[Math.cos(angle) * 1.58, Math.sin(angle) * 1.58, 0]}
-            rotation={[0, 0, angle + Math.PI / 2]}
-          >
-            <meshStandardMaterial
-              color="#d5f7a5"
-              emissive="#24e5a0"
-              emissiveIntensity={idx % 2 === 0 ? 1.35 : 0.65}
-              metalness={0.5}
-              roughness={0.18}
+      {/* ==================================================================
+          PART 1 & 2 — THE CENTRAL MONOLITH & INTERNAL ENERGY CHAMBER
+         ================================================================== */}
+      <group ref={monolithGroupRef} rotation={[0.08, -0.28, 0.05]}>
+        {/* 2A. Faceted Emerald Crystal & Bioluminescent Energy Chamber */}
+        <group ref={crystalGroupRef}>
+          <mesh geometry={geometries.innerCrystalGeo}>
+            <shaderMaterial
+              ref={chamberMatRef}
+              vertexShader={CRYSTAL_CHAMBER_VERTEX_SHADER}
+              fragmentShader={CRYSTAL_CHAMBER_FRAGMENT_SHADER}
+              uniforms={chamberUniforms}
             />
           </mesh>
-        ))}
-      </group>
+        </group>
 
-      {/* 2B. ORBIT 2 — Elliptical Emerald Energy Conduit */}
-      <group ref={orbit2Ref} rotation={[-0.52, 0.46, -0.28]}>
-        <mesh geometry={geometries.orbit2Torus}>
-          <shaderMaterial
-            ref={conduitMatRef}
-            vertexShader={CONDUIT_VERTEX_SHADER}
-            fragmentShader={CONDUIT_FRAGMENT_SHADER}
-            transparent
-            depthWrite={false}
-            uniforms={conduitUniforms}
+        {/* 2B. Internal Machined Titanium Emitter Sockets (top & bottom of chamber) */}
+        <mesh geometry={geometries.collarGeo} position={[0, 0.56, 0]}>
+          <meshPhysicalMaterial
+            color="#73807c"
+            metalness={0.88}
+            roughness={0.2}
+            clearcoat={0.35}
+            envMap={envMap}
+            envMapIntensity={2.2}
+          />
+        </mesh>
+        <mesh geometry={geometries.collarGeo} position={[0, -0.56, 0]}>
+          <meshPhysicalMaterial
+            color="#73807c"
+            metalness={0.88}
+            roughness={0.2}
+            clearcoat={0.35}
+            envMap={envMap}
+            envMapIntensity={2.2}
+          />
+        </mesh>
+
+        {/* 1A. Outer Crowned Multi-Faceted Black Optical Glass Monolith
+            Uses physical transmission with dark obsidian-emerald Beer's Law attenuation
+            so the internal emerald crystal chamber refracts vividly inside a smoked glass prism. */}
+        <mesh geometry={geometries.monolithGlassGeo}>
+          <meshPhysicalMaterial
+            color="#ccebe0"
+            emissive="#030d09"
+            emissiveIntensity={0.12}
+            metalness={0.0}
+            roughness={0.04}
+            transmission={0.93}
+            ior={1.48}
+            thickness={0.48}
+            attenuationColor="#07281c"
+            attenuationDistance={0.88}
+            clearcoat={1.0}
+            clearcoatRoughness={0.03}
+            reflectivity={0.96}
+            envMap={envMap}
+            envMapIntensity={2.0}
+          />
+        </mesh>
+
+        {/* 1B. Precision-Machined Dark Titanium Crown & Base Caps */}
+        <mesh geometry={geometries.crownCapGeo}>
+          <meshPhysicalMaterial
+            color="#788581"
+            metalness={0.88}
+            roughness={0.21}
+            clearcoat={0.35}
+            clearcoatRoughness={0.16}
+            envMap={envMap}
+            envMapIntensity={2.2}
+          />
+        </mesh>
+        <mesh geometry={geometries.baseCapGeo}>
+          <meshPhysicalMaterial
+            color="#788581"
+            metalness={0.88}
+            roughness={0.21}
+            clearcoat={0.35}
+            clearcoatRoughness={0.16}
+            envMap={envMap}
+            envMapIntensity={2.2}
+          />
+        </mesh>
+
+        {/* 1C. Lateral Titanium Structural Spine Clamps */}
+        <mesh geometry={geometries.spineGeo} position={[-0.45, 0, 0]}>
+          <meshPhysicalMaterial
+            color="#7e8c87"
+            metalness={0.89}
+            roughness={0.19}
+            clearcoat={0.38}
+            envMap={envMap}
+            envMapIntensity={2.3}
+          />
+        </mesh>
+        <mesh geometry={geometries.spineGeo} position={[0.45, 0, 0]}>
+          <meshPhysicalMaterial
+            color="#7e8c87"
+            metalness={0.89}
+            roughness={0.19}
+            clearcoat={0.38}
+            envMap={envMap}
+            envMapIntensity={2.3}
           />
         </mesh>
       </group>
 
-      {/* 2C. ORBIT 3 — Precision 72-Tick Telemetry Dial Ring */}
-      <group ref={orbit3Ref} rotation={[-0.42, -0.64, 0.36]}>
-        <lineSegments geometry={geometries.dialTicksGeo}>
-          <lineBasicMaterial color="#6ca38b" transparent opacity={0.48} />
-        </lineSegments>
+      {/* ==================================================================
+          PART 3 — PRECISION ORBITAL STRUCTURE (DOMINANT TITANIUM GIMBAL)
+         ================================================================== */}
+      <group ref={primaryOrbitRef} rotation={[0.62, -0.34, 0.18]}>
+        {/* Dominant Chamfered Brushed Titanium Ring */}
+        <mesh geometry={geometries.primaryOrbitGeo}>
+          <meshPhysicalMaterial
+            color="#788682"
+            metalness={0.88}
+            roughness={0.2}
+            clearcoat={0.38}
+            clearcoatRoughness={0.15}
+            envMap={envMap}
+            envMapIntensity={2.3}
+          />
+        </mesh>
+
+        {/* Recessed Inner Emerald Optical Seam */}
+        <mesh geometry={geometries.orbitSeamGeo}>
+          <shaderMaterial
+            ref={seamMatRef}
+            vertexShader={SEAM_VERTEX_SHADER}
+            fragmentShader={SEAM_FRAGMENT_SHADER}
+            uniforms={seamUniforms}
+          />
+        </mesh>
+
+        {/* Opposed Machined Titanium Trunnion Clamps */}
+        <mesh
+          geometry={geometries.mountGeo}
+          position={[1.555, 0, 0]}
+          rotation={[0, 0, 0]}
+        >
+          <meshPhysicalMaterial
+            color="#889692"
+            metalness={0.9}
+            roughness={0.17}
+            clearcoat={0.42}
+            envMap={envMap}
+            envMapIntensity={2.4}
+          />
+        </mesh>
+        <mesh
+          geometry={geometries.mountGeo}
+          position={[-1.555, 0, 0]}
+          rotation={[0, 0, Math.PI]}
+        >
+          <meshPhysicalMaterial
+            color="#889692"
+            metalness={0.9}
+            roughness={0.17}
+            clearcoat={0.42}
+            envMap={envMap}
+            envMapIntensity={2.4}
+          />
+        </mesh>
       </group>
 
-      {/* 3. PARTICLE SYSTEM — Intentional Orbital & Pointer-Reactive Field */}
-      <points geometry={geometries.particlesGeo} renderOrder={5}>
-        <shaderMaterial
-          ref={particleMatRef}
-          vertexShader={PARTICLE_VERTEX_SHADER}
-          fragmentShader={PARTICLE_FRAGMENT_SHADER}
-          transparent
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-          uniforms={particleUniforms}
-        />
-      </points>
+      {/* Secondary Asymmetric 210° Titanium Counter-Arc */}
+      <group ref={secondaryArcRef} rotation={[-0.54, 0.42, -0.45]}>
+        <mesh geometry={geometries.secondaryArcGeo}>
+          <meshPhysicalMaterial
+            color="#687571"
+            metalness={0.88}
+            roughness={0.24}
+            clearcoat={0.32}
+            envMap={envMap}
+            envMapIntensity={2.0}
+          />
+        </mesh>
+      </group>
     </group>
   );
 }
@@ -741,7 +913,7 @@ export default function AiquorCore({ onUnavailable }: { onUnavailable: () => voi
       if (!target) return;
       if (target instanceof HTMLInputElement) {
         interactionState.focusLevel = target.type === "password" ? 2 : 1;
-        interactionState.pulseSurge = 0.45;
+        interactionState.pulseSurge = 0.35;
       } else if (target.closest(".auth-form-content")) {
         interactionState.focusLevel = 1;
       }
@@ -769,7 +941,7 @@ export default function AiquorCore({ onUnavailable }: { onUnavailable: () => voi
     };
 
     const onSubmit = () => {
-      interactionState.pulseSurge = 0.95;
+      interactionState.pulseSurge = 0.75;
     };
 
     const onVisibilityChange = () => {
@@ -812,6 +984,8 @@ export default function AiquorCore({ onUnavailable }: { onUnavailable: () => voi
           antialias: true,
           alpha: true,
           powerPreference: "high-performance",
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.25,
         }}
       >
         <CanvasLifecycle onUnavailable={onUnavailable} />
