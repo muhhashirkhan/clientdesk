@@ -269,45 +269,13 @@ function paintSourceBackdrop(
   }
 }
 
-function tagGlassDOM(root: ParentNode) {
-  const containers = root.querySelectorAll<HTMLElement>(
-    ".panel, .stat-card, .project-card, .upload-form, .empty, .sidebar-note, .glass-card, .topbar",
-  );
-  containers.forEach((el) => {
-    el.classList.add("glass-container");
-  });
-
-  const pills = root.querySelectorAll<HTMLElement>(".glass-pill, .badge");
-  pills.forEach((el) => {
-    el.classList.add("glass-container", "glass-container-pill");
-  });
-
-  const circles = root.querySelectorAll<HTMLElement>(
-    ".orbital-icon, .project-symbol, .milestone-number, .file-icon, .notification-icon, .empty-icon",
-  );
-  circles.forEach((el) => {
-    el.classList.add("glass-container", "glass-container-circle");
-  });
-
-  const buttons = root.querySelectorAll<HTMLElement>(".button, .icon-button");
-  buttons.forEach((el) => {
-    el.classList.add("glass-button");
-    if (el.classList.contains("icon-button")) {
-      el.classList.add("glass-button-circle");
-    }
-    if (el.closest(".glass-container")) {
-      el.dataset.nestedGlass = "true";
-    }
-  });
-}
-
 // Shared multi-layer WebGL refraction pipeline (Container + Nested Button Glass)
 export function GlassButtons() {
   const ref = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const scope = ref.current?.parentElement ?? document.documentElement;
+    const rendererEl = ref.current;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -324,10 +292,6 @@ export function GlassButtons() {
       window.Container = GlassContainer;
       window.Button = GlassButton;
     }
-
-    tagGlassDOM(scope);
-    const observer = new MutationObserver(() => tagGlassDOM(scope));
-    observer.observe(scope, { childList: true, subtree: true });
 
     let cancelled = false;
     const controller = new AbortController();
@@ -586,30 +550,30 @@ export function GlassButtons() {
           },
         );
 
-        const targets = [scope, document.documentElement];
-        targets.forEach((t) => {
-          t.style.setProperty(
-            "--liquid-container-texture",
-            `url("${containerUrl}")`,
-          );
-          t.style.setProperty(
-            "--liquid-dark-container-texture",
-            `url("${darkContainerUrl}")`,
-          );
-          t.style.setProperty(
-            "--liquid-circle-texture",
-            `url("${circleUrl}")`,
-          );
-          t.style.setProperty(
-            "--liquid-button-texture",
-            `url("${nestedButtonUrl}")`,
-          );
-          t.style.setProperty(
-            "--liquid-nested-button-texture",
-            `url("${nestedButtonUrl}")`,
-          );
-        });
-        scope.dataset.glassReady = "true";
+        const rootEl = document.documentElement;
+        rootEl.style.setProperty(
+          "--liquid-container-texture",
+          `url("${containerUrl}")`,
+        );
+        rootEl.style.setProperty(
+          "--liquid-dark-container-texture",
+          `url("${darkContainerUrl}")`,
+        );
+        rootEl.style.setProperty(
+          "--liquid-circle-texture",
+          `url("${circleUrl}")`,
+        );
+        rootEl.style.setProperty(
+          "--liquid-button-texture",
+          `url("${nestedButtonUrl}")`,
+        );
+        rootEl.style.setProperty(
+          "--liquid-nested-button-texture",
+          `url("${nestedButtonUrl}")`,
+        );
+        if (rendererEl) {
+          rendererEl.dataset.glassReady = "true";
+        }
 
         // Also update any programmatic GlassContainer / GlassButton instances
         GlassContainer.instances.forEach((inst) => {
@@ -671,19 +635,19 @@ export function GlassButtons() {
     return () => {
       cancelled = true;
       controller.abort();
-      observer.disconnect();
       disposeGL();
       if (window.updateAllGlassInstances === updateAll) window.updateAllGlassInstances = previousUpdate;
       if (window.Container === GlassContainer) window.Container = previousContainer;
       if (window.Button === GlassButton) window.Button = previousButton;
-      [scope, document.documentElement].forEach((t) => {
-        t.style.removeProperty("--liquid-container-texture");
-        t.style.removeProperty("--liquid-dark-container-texture");
-        t.style.removeProperty("--liquid-circle-texture");
-        t.style.removeProperty("--liquid-button-texture");
-        t.style.removeProperty("--liquid-nested-button-texture");
-      });
-      delete scope.dataset.glassReady;
+      const rootEl = document.documentElement;
+      rootEl.style.removeProperty("--liquid-container-texture");
+      rootEl.style.removeProperty("--liquid-dark-container-texture");
+      rootEl.style.removeProperty("--liquid-circle-texture");
+      rootEl.style.removeProperty("--liquid-button-texture");
+      rootEl.style.removeProperty("--liquid-nested-button-texture");
+      if (rendererEl) {
+        delete rendererEl.dataset.glassReady;
+      }
     };
   }, []);
 

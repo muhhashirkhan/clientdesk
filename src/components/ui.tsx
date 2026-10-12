@@ -51,7 +51,7 @@ export function Empty({
 }) {
   return (
     <div className="empty glass-container">
-      <span className="empty-icon glass-container-circle">
+      <span className="empty-icon glass-container glass-container-circle">
         <FolderOpen size={26} />
       </span>
       <h2>{title}</h2>
@@ -67,7 +67,7 @@ export function Empty({
 }
 export function Badge({ value }: { value: string }) {
   return (
-    <span className={`badge glass-container-pill ${value}`}>
+    <span className={`badge glass-container glass-container-pill ${value}`}>
       <i />
       {label(value)}
     </span>
@@ -108,7 +108,7 @@ export function ProjectCard({
   return (
     <Link href={"/projects/" + project.id} className="project-card glass-container">
       <div className="card-top">
-        <span className="project-symbol glass-container-circle">
+        <span className="project-symbol glass-container glass-container-circle">
           <FolderOpen size={20} />
         </span>
         <Badge value={project.archived ? "archived" : project.status} />
