@@ -33,8 +33,8 @@ export default async function Approvals({
     ? rawStatus!
     : "";
 
-  const { db, profile } = await session();
-  const admin = profile.role === "admin";
+  const { db, profile, workspaceRole } = await session();
+  const admin = workspaceRole !== "client" || profile.role === "admin";
 
   const [pendingExact, approvedExact, changesExact] = await Promise.all([
     db

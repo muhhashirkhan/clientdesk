@@ -9,7 +9,8 @@ export default async function PortalLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { db, profile, user } = await session();
+  const { db, profile, user, company, companies, workspaceRole } =
+    await session();
   const unread = await db
     .from("notifications")
     .select("id", { count: "exact", head: true })
@@ -27,6 +28,15 @@ export default async function PortalLayout({
         unread={unread.count ?? 0}
         fullName={profile.full_name}
         email={user.email || ""}
+        companyName={company?.name || "Aiquor"}
+        companySlug={company?.slug || "aiquor"}
+        activeCompanyId={company?.id || ""}
+        workspaceRole={workspaceRole}
+        companies={companies.map((c) => ({
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+        }))}
       >
         {children}
       </WorkspaceShell>

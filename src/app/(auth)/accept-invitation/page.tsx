@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { serverClient, configured } from "@/lib/supabase/server";
 import { Form, Field, Hidden } from "@/components/forms";
-import { acceptInvitation } from "@/app/actions";
+import { acceptInvitation, acceptTeamInvitation } from "@/app/actions";
 import { uuid } from "@/lib/validation";
+
 export default async function Accept({
   searchParams,
 }: {
@@ -42,16 +43,29 @@ export default async function Accept({
         </Link>
       </>
     );
-  const row = await db
+
+  const clientInvite = await db
     .from("invitations")
     .select("*")
     .eq("id", invitation!)
     .maybeSingle();
+
+  const teamInvite =
+    !clientInvite.data
+      ? await db
+          .from("company_invitations")
+          .select("*")
+          .eq("id", invitation!)
+          .maybeSingle()
+      : { data: null, error: null };
+
+  const activeInvite = clientInvite.data || teamInvite.data;
+  const isTeamInvite = Boolean(teamInvite.data && !clientInvite.data);
+
   if (
-    row.error ||
-    !row.data ||
-    row.data.revoked_at ||
-    new Date(row.data.expires_at) < new Date()
+    !activeInvite ||
+    activeInvite.revoked_at ||
+    new Date(activeInvite.expires_at) < new Date()
   )
     return (
       <>
@@ -61,22 +75,28 @@ export default async function Accept({
           is unavailable.
         </h1>
         <p>
-          It may have expired or been sent to a different email. Ask Aiquor for
-          a new invitation.
+          It may have expired or been sent to a different email. Ask your
+          workspace administrator for a new invitation.
         </p>
         <Link href="/dashboard">Back to your workspace</Link>
       </>
     );
+
   return (
     <>
-      <p className="eyebrow">YOUR INVITATION TO AIQUOR</p>
+      <p className="eyebrow">
+        {isTeamInvite ? "TEAM WORKSPACE INVITATION" : "YOUR INVITATION TO AIQUOR"}
+      </p>
       <h1 className="auth-title">
         Welcome to
         <br />
         your workspace.
       </h1>
       <p className="muted">Set up your account for {user.email}.</p>
-      <Form action={acceptInvitation} submit="Accept invitation">
+      <Form
+        action={isTeamInvite ? acceptTeamInvitation : acceptInvitation}
+        submit="Accept invitation"
+      >
         <Hidden name="invitation" value={invitation!} />
         <Field label="Full name" name="full_name" maxLength={120} />
         <Field

@@ -4,6 +4,7 @@ import {
   FolderKanban,
   CheckCheck,
   RotateCcw,
+  ArrowUpDown,
 } from "lucide-react";
 import { session, check } from "@/lib/data";
 import {
@@ -22,6 +23,13 @@ const statusFilters: { value: string; label: string }[] = [
   { value: "completed", label: "Completed" },
 ];
 
+const sortOptions: { value: string; label: string }[] = [
+  { value: "updated_at", label: "Recently updated" },
+  { value: "deadline", label: "Upcoming deadline" },
+  { value: "name", label: "Name (A–Z)" },
+  { value: "status", label: "Status" },
+];
+
 export default async function Projects({
   searchParams,
 }: {
@@ -29,6 +37,7 @@ export default async function Projects({
     q?: string;
     status?: string;
     archived?: string;
+    sort?: string;
     page?: string;
   }>;
 }) {
@@ -36,16 +45,36 @@ export default async function Projects({
   const q = (p.q || "").slice(0, 160);
   const currentStatus = p.status || "";
   const isArchived = p.archived === "true";
+  const currentSort = ["updated_at", "deadline", "name", "status"].includes(
+    p.sort || "",
+  )
+    ? p.sort!
+    : "updated_at";
   const page = Math.max(1, Math.min(10000, Math.floor(Number(p.page)) || 1));
-  const { db, profile } = await session();
-  const admin = profile.role === "admin";
+  const { db, profile, workspaceRole } = await session();
+  const admin = workspaceRole !== "client" || profile.role === "admin";
 
   let query = db
     .from("projects")
     .select("*", { count: "exact" })
-    .eq("archived", isArchived)
-    .order("updated_at", { ascending: false })
-    .order("id", { ascending: false });
+    .eq("archived", isArchived);
+
+  if (currentSort === "deadline") {
+    query = query
+      .order("deadline", { ascending: true, nullsFirst: false })
+      .order("updated_at", { ascending: false });
+  } else if (currentSort === "name") {
+    query = query.order("name", { ascending: true });
+  } else if (currentSort === "status") {
+    query = query
+      .order("status", { ascending: true })
+      .order("updated_at", { ascending: false });
+  } else {
+    query = query
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false });
+  }
+
   if (q) {
     const escapedQ = q.replace(/[\\%_]/g, "\\$&");
     query = query.ilike("name", "%" + escapedQ + "%");
@@ -65,7 +94,12 @@ export default async function Projects({
             projects.map((proj) => proj.id),
           )
       : Promise.resolve({ data: [], error: null }),
-    projects.length ? db.from("clients").select("id,name,company").in("id", [...new Set(projects.map(project => project.client_id))]) : Promise.resolve({data:[],error:null}),
+    projects.length
+      ? db
+          .from("clients")
+          .select("id,name,company")
+          .in("id", [...new Set(projects.map((project) => project.client_id))])
+      : Promise.resolve({ data: [], error: null }),
   ]);
   check(ms.error);
   check(cs.error);
@@ -78,6 +112,7 @@ export default async function Projects({
       q,
       status: p.status || "",
       archived: p.archived || "",
+      sort: currentSort !== "updated_at" ? currentSort : "",
       page: String(n),
     }).toString();
 
@@ -85,6 +120,7 @@ export default async function Projects({
     q?: string;
     status?: string;
     archived?: string;
+    sort?: string;
   }) => {
     const params = new URLSearchParams();
     const nextQ = overrides.q !== undefined ? overrides.q : q;
@@ -92,15 +128,20 @@ export default async function Projects({
       overrides.status !== undefined ? overrides.status : currentStatus;
     const nextArchived =
       overrides.archived !== undefined ? overrides.archived : p.archived || "";
+    const nextSort =
+      overrides.sort !== undefined ? overrides.sort : currentSort;
     if (nextQ) params.set("q", nextQ);
     if (nextStatus) params.set("status", nextStatus);
     if (nextArchived === "true") params.set("archived", "true");
+    if (nextSort && nextSort !== "updated_at") params.set("sort", nextSort);
     const qs = params.toString();
     return qs ? `/projects?${qs}` : "/projects";
   };
 
   const totalCount = result.count ?? 0;
-  const hasFilters = Boolean(q || currentStatus || isArchived);
+  const hasFilters = Boolean(
+    q || currentStatus || isArchived || currentSort !== "updated_at",
+  );
   const inReviewMilestones = milestones.filter(
     (m) => m.status === "in_review",
   ).length;
@@ -171,7 +212,7 @@ export default async function Projects({
 
       <section
         className="projects-discovery-panel glass-container"
-        aria-label="Filter and search projects"
+        aria-label="Filter, sort, and search projects"
       >
         <div className="projects-filter-pills-row">
           <div
@@ -228,9 +269,23 @@ export default async function Projects({
             <span className="sr-only">Search projects</span>
             <input name="q" placeholder="Find a project…" defaultValue={q} />
           </label>
+          <label
+            className="field"
+            style={{ margin: 0, minWidth: 190 }}
+            aria-label="Sort projects by"
+          >
+            <span className="sr-only">Sort projects by</span>
+            <select name="sort" defaultValue={currentSort}>
+              {sortOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  Sort: {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button className="button secondary glass-button" type="submit">
-            <Search size={15} />
-            Search
+            <ArrowUpDown size={15} />
+            Apply
           </button>
           {hasFilters && (
             <Link
@@ -252,6 +307,7 @@ export default async function Projects({
             ? ` · ${currentStatus.replace("_", " ")}`
             : ""}
           {q ? ` · Matching "${q}"` : ""}
+          {` · Sorted by ${sortOptions.find((s) => s.value === currentSort)?.label.toLowerCase()}`}
         </p>
       </div>
 
@@ -326,4 +382,3 @@ export default async function Projects({
     </div>
   );
 }
-

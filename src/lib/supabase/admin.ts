@@ -1,7 +1,14 @@
 import "server-only";
 import { resolveAppUrl } from "../app-url";
 import { createClient } from "@supabase/supabase-js";
+import { createLocalSupabaseClient } from "./local-pg";
+
 export function adminClient() {
+  if (process.env.CLIENTDESK_LOCAL_PG === "true") {
+    return createLocalSupabaseClient(undefined, {
+      serviceRole: true,
+    }) as unknown as ReturnType<typeof createClient>;
+  }
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY)
     throw new Error("Invitation delivery is not configured yet.");
   return createClient(
@@ -15,7 +22,11 @@ export function appUrl() {
     VERCEL_ENV: process.env.VERCEL_ENV,
     VERCEL_BRANCH_URL: process.env.VERCEL_BRANCH_URL,
     VERCEL_URL: process.env.VERCEL_URL,
-    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_APP_URL:
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.CLIENTDESK_LOCAL_PG === "true"
+        ? "http://localhost:3013"
+        : undefined),
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   });
 }

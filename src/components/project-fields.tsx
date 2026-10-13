@@ -24,7 +24,9 @@ export function ProjectFields({
           <select
             name="client_id"
             required
-            defaultValue={project?.client_id || ""}
+            defaultValue={
+              project?.client_id || (clients.length === 1 ? clients[0].id : "")
+            }
           >
             <option value="" disabled>
               Select a client

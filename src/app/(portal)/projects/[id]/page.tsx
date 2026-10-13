@@ -12,18 +12,25 @@ import {
   Clock3,
   Sparkles,
   AlertTriangle,
+  ListTodo,
+  Activity,
 } from "lucide-react";
 import { projectData, check } from "@/lib/data";
 import { BackLink, Badge, Empty } from "@/components/ui";
 import { Form, Field, Textarea, Hidden, UploadForm } from "@/components/forms";
 import { ProjectFields } from "@/components/project-fields";
 import { ReviewCard } from "@/components/review-card";
+import { ProjectRealtime } from "@/components/project-realtime";
 import {
   updateProject,
   archiveProject,
   addMilestone,
   editMilestone,
   submitMilestone,
+  addProjectTask,
+  updateProjectTask,
+  setTaskStatus,
+  deleteProjectTask,
   postComment,
   deleteFile,
 } from "@/app/actions";
@@ -50,6 +57,7 @@ export default async function ProjectPage({
   const tab = [
     "overview",
     "milestones",
+    "tasks",
     "files",
     "discussion",
     "approvals",
@@ -60,15 +68,19 @@ export default async function ProjectPage({
     db,
     user,
     profile,
+    workspaceRole,
+    isOwnerOrAdmin,
     project,
     milestones,
+    tasks,
+    teamMembers,
     submissions,
     decisions,
     files,
     comments,
     client,
   } = await projectData(id);
-  const admin = profile.role === "admin",
+  const admin = workspaceRole !== "client" || profile.role === "admin",
     readOnly = project.archived || project.status === "completed";
   let clients: Client[] = [];
   if (admin) {
@@ -84,12 +96,60 @@ export default async function ProjectPage({
     (m) => m.status === "changes_requested",
   );
   const plannedMilestones = milestones.filter((m) => m.status === "planned");
+  const doneTasks = tasks.filter((t) => t.status === "done");
+  const inProgressTasks = tasks.filter((t) => t.status === "in_progress");
+  const inReviewTasks = tasks.filter((t) => t.status === "in_review");
   const pct = progress(milestones);
   const nextAction = getProjectNextAction(project, milestones, admin);
   const activeMilestone = milestones.find((m) => m.status !== "approved");
   const readyToComplete =
     !readOnly && milestones.length > 0 && !activeMilestone;
   const totalFileBytes = files.reduce((acc, f) => acc + (f.size || 0), 0);
+
+  const activityHistory = [
+    ...decisions.map((d) => ({
+      id: `dec-${d.id}`,
+      kind: "decision",
+      title: `${d.actor_name} ${d.decision === "approved" ? "approved deliverable" : "requested revisions"}`,
+      detail: d.feedback || "Milestone decision recorded",
+      created_at: d.created_at,
+      href: `/projects/${id}?tab=approvals`,
+    })),
+    ...submissions.map((s) => ({
+      id: `sub-${s.id}`,
+      kind: "review",
+      title: `${s.author_name} submitted milestone work for review`,
+      detail: s.notes,
+      created_at: s.created_at,
+      href: `/projects/${id}?tab=approvals`,
+    })),
+    ...tasks.map((t) => ({
+      id: `task-${t.id}`,
+      kind: "task",
+      title: `Task "${t.title}" (${t.status.replace("_", " ")})`,
+      detail: t.assignee_name ? `Assigned to ${t.assignee_name}` : "Project task",
+      created_at: t.updated_at || t.created_at,
+      href: `/projects/${id}?tab=tasks`,
+    })),
+    ...files.map((f) => ({
+      id: `file-${f.id}`,
+      kind: "file",
+      title: `${f.author_name} uploaded ${f.original_name}`,
+      detail: bytes(f.size),
+      created_at: f.created_at,
+      href: `/projects/${id}?tab=files`,
+    })),
+    ...comments.map((c) => ({
+      id: `com-${c.id}`,
+      kind: "comment",
+      title: `${c.author_name} posted in project discussion`,
+      detail: c.body.slice(0, 120),
+      created_at: c.created_at,
+      href: `/projects/${id}?tab=discussion`,
+    })),
+  ]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 8);
 
   const tabs = [
     { key: "overview", label: "Overview", icon: FileText, count: null },
@@ -98,6 +158,12 @@ export default async function ProjectPage({
       label: "Milestones",
       icon: Flag,
       count: milestones.length,
+    },
+    {
+      key: "tasks",
+      label: "Tasks",
+      icon: ListTodo,
+      count: tasks.length,
     },
     { key: "files", label: "Files", icon: Paperclip, count: files.length },
     {
@@ -125,6 +191,7 @@ export default async function ProjectPage({
 
   return (
     <div className="project-detail-workspace">
+      <ProjectRealtime projectId={id} />
       <div className="project-back-row">
         <BackLink href="/projects">All projects</BackLink>
         {admin && readyToComplete ? (
@@ -246,7 +313,7 @@ export default async function ProjectPage({
             read-only.{" "}
             {admin
               ? "Restore it or change its status to continue working."
-              : "Aiquor can reopen it if more work is needed."}
+              : "Your workspace team can reopen it if more work is needed."}
           </span>
         </div>
       )}
@@ -323,7 +390,7 @@ export default async function ProjectPage({
                 <p className="muted overview-empty-copy">
                   {admin
                     ? "No milestones added yet. Break the agreed scope into clear milestones so the client can track progress and approve deliverables."
-                    : "Milestones will appear here once Aiquor schedules the project phases."}
+                    : "Milestones will appear here once the project phases are scheduled."}
                 </p>
               )}
 
@@ -335,6 +402,12 @@ export default async function ProjectPage({
                   </strong>
                 </div>
                 <div>
+                  <span>Tasks</span>
+                  <strong>
+                    {doneTasks.length}/{tasks.length} done
+                  </strong>
+                </div>
+                <div>
                   <span>Shared files</span>
                   <strong>{files.length} uploaded</strong>
                 </div>
@@ -342,11 +415,43 @@ export default async function ProjectPage({
                   <span>Discussion</span>
                   <strong>{comments.length} messages</strong>
                 </div>
+              </div>
+            </section>
+
+            <section className="panel project-activity-history-panel glass-container">
+              <div className="card-top project-section-top">
                 <div>
-                  <span>Approvals</span>
-                  <strong>{submissions.length} submissions</strong>
+                  <p className="eyebrow">CHRONOLOGICAL AUDIT TRAIL</p>
+                  <h2>
+                    <Activity size={17} style={{ marginRight: 6, verticalAlign: "text-bottom" }} />
+                    Project activity history
+                  </h2>
                 </div>
               </div>
+              {activityHistory.length ? (
+                <div className="overview-milestone-list">
+                  {activityHistory.map((item) => (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      className="overview-milestone-row"
+                    >
+                      <div className="overview-milestone-info">
+                        <strong>{item.title}</strong>
+                        <small>
+                          {item.detail} · {timestamp(item.created_at)}
+                        </small>
+                      </div>
+                      <Badge value={item.kind} />
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted overview-empty-copy">
+                  Project milestones, task updates, file uploads, and client
+                  decisions will appear here in real time.
+                </p>
+              )}
             </section>
           </div>
 
@@ -495,7 +600,7 @@ export default async function ProjectPage({
               )}
             </section>
 
-            {admin && (
+            {(isOwnerOrAdmin || profile.role === "admin") && (
               <section className="panel archive-panel glass-container">
                 <h3>
                   {project.archived
@@ -726,7 +831,262 @@ export default async function ProjectPage({
               description={
                 admin
                   ? "Add the steps and deliverables you’ve agreed with your client."
-                  : "Aiquor will add the milestones for your project here."
+                  : "Your workspace team will add the milestones for your project here."
+              }
+            />
+          )}
+        </>
+      )}
+
+      {tab === "tasks" && (
+        <>
+          <div className="milestone-summary-strip glass-container">
+            <div className="milestone-summary-cell">
+              <span>Total tasks</span>
+              <strong>{tasks.length}</strong>
+            </div>
+            <div className="milestone-summary-cell">
+              <span>Done</span>
+              <strong className="text-emerald">{doneTasks.length}</strong>
+            </div>
+            <div className="milestone-summary-cell">
+              <span>In progress</span>
+              <strong className="text-warning">{inProgressTasks.length}</strong>
+            </div>
+            <div className="milestone-summary-cell">
+              <span>In review</span>
+              <strong>{inReviewTasks.length}</strong>
+            </div>
+          </div>
+
+          {admin && !readOnly && (
+            <details className="panel create-panel glass-container" open={!tasks.length || undefined}>
+              <summary>
+                <ListTodo size={18} />
+                Add a project task<span>+</span>
+              </summary>
+              <Form action={addProjectTask} submit="Create task" reset>
+                <Hidden name="project_id" value={id} />
+                <div className="form-grid">
+                  <Field
+                    label="Task title"
+                    name="title"
+                    maxLength={180}
+                    placeholder="e.g. Implement SSO callback & audit logging"
+                  />
+                  <Field
+                    label="Due date"
+                    name="due_date"
+                    type="date"
+                    required={false}
+                  />
+                </div>
+                <div className="form-grid">
+                  <label className="field">
+                    Priority
+                    <select name="priority" defaultValue="medium">
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    Initial status
+                    <select name="status" defaultValue="todo">
+                      <option value="todo">To do</option>
+                      <option value="in_progress">In progress</option>
+                      <option value="in_review">In review</option>
+                      <option value="done">Done</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="form-grid">
+                  <label className="field">
+                    Assign to team member
+                    <span className="optional">Optional</span>
+                    <select name="assignee_id" defaultValue="">
+                      <option value="">Unassigned</option>
+                      {teamMembers.map((m) => (
+                        <option key={m.user_id} value={m.user_id}>
+                          {m.full_name || "Team member"} ({m.role})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Linked milestone
+                    <span className="optional">Optional</span>
+                    <select name="milestone_id" defaultValue="">
+                      <option value="">No milestone</option>
+                      {milestones.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <Textarea
+                  label="Task notes & acceptance criteria"
+                  name="description"
+                  placeholder="Describe requirements, links, or checklist details."
+                />
+              </Form>
+            </details>
+          )}
+
+          {tasks.length ? (
+            <div className="milestone-list">
+              {tasks.map((t, index) => {
+                const linkedMilestone = milestones.find(
+                  (m) => m.id === t.milestone_id,
+                );
+                return (
+                  <article
+                    className={`panel milestone-card glass-container status-${t.status}`}
+                    key={t.id}
+                  >
+                    <div className={`milestone-number status-${t.status}`}>
+                      {String(index + 1).padStart(2, "0")}
+                    </div>
+                    <div className="milestone-body">
+                      <div className="card-top">
+                        <div>
+                          <span className="milestone-seq-label">
+                            PRIORITY: {t.priority.toUpperCase()} ·{" "}
+                            {dueLabel(t.due_date)}
+                            {t.assignee_name ? ` · Assigned to ${t.assignee_name}` : ""}
+                            {linkedMilestone ? ` · ${linkedMilestone.title}` : ""}
+                          </span>
+                          <h2>{t.title}</h2>
+                        </div>
+                        <Badge value={t.status} />
+                      </div>
+                      {t.description && (
+                        <p className="preserve">{t.description}</p>
+                      )}
+
+                      {admin && !readOnly && (
+                        <div className="file-row-actions" style={{ marginTop: "0.75rem", flexWrap: "wrap" }}>
+                          {t.status !== "done" && (
+                            <Form
+                              action={setTaskStatus}
+                              submit="Mark done"
+                              className="small-form"
+                            >
+                              <Hidden name="id" value={t.id} />
+                              <Hidden name="status" value="done" />
+                            </Form>
+                          )}
+                          {t.status === "todo" && (
+                            <Form
+                              action={setTaskStatus}
+                              submit="Start work"
+                              className="small-form"
+                            >
+                              <Hidden name="id" value={t.id} />
+                              <Hidden name="status" value="in_progress" />
+                            </Form>
+                          )}
+                          <details className="edit-details" style={{ width: "100%" }}>
+                            <summary>Edit or delete task</summary>
+                            <Form action={updateProjectTask} submit="Save task">
+                              <Hidden name="id" value={t.id} />
+                              <div className="form-grid">
+                                <Field
+                                  label="Task title"
+                                  name="title"
+                                  value={t.title}
+                                  maxLength={180}
+                                />
+                                <Field
+                                  label="Due date"
+                                  name="due_date"
+                                  type="date"
+                                  value={t.due_date || ""}
+                                  required={false}
+                                />
+                              </div>
+                              <div className="form-grid">
+                                <label className="field">
+                                  Status
+                                  <select name="status" defaultValue={t.status}>
+                                    <option value="todo">To do</option>
+                                    <option value="in_progress">In progress</option>
+                                    <option value="in_review">In review</option>
+                                    <option value="done">Done</option>
+                                  </select>
+                                </label>
+                                <label className="field">
+                                  Priority
+                                  <select name="priority" defaultValue={t.priority}>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                  </select>
+                                </label>
+                              </div>
+                              <div className="form-grid">
+                                <label className="field">
+                                  Assignee
+                                  <select
+                                    name="assignee_id"
+                                    defaultValue={t.assignee_id || ""}
+                                  >
+                                    <option value="">Unassigned</option>
+                                    {teamMembers.map((m) => (
+                                      <option key={m.user_id} value={m.user_id}>
+                                        {m.full_name || "Team member"} ({m.role})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="field">
+                                  Linked milestone
+                                  <select
+                                    name="milestone_id"
+                                    defaultValue={t.milestone_id || ""}
+                                  >
+                                    <option value="">No milestone</option>
+                                    {milestones.map((m) => (
+                                      <option key={m.id} value={m.id}>
+                                        {m.title}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
+                              <Textarea
+                                label="Description"
+                                name="description"
+                                value={t.description}
+                              />
+                            </Form>
+                            <div style={{ marginTop: "0.75rem" }}>
+                              <Form
+                                action={deleteProjectTask}
+                                submit="Delete task"
+                                danger
+                                confirm={`Delete task "${t.title}"?`}
+                              >
+                                <Hidden name="id" value={t.id} />
+                              </Form>
+                            </div>
+                          </details>
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <Empty
+              title="No project tasks yet."
+              description={
+                admin
+                  ? "Break milestones into actionable tasks, assign team members, and track execution."
+                  : "Tasks assigned to this project will appear here."
               }
             />
           )}
@@ -893,4 +1253,3 @@ export default async function ProjectPage({
     </div>
   );
 }
-

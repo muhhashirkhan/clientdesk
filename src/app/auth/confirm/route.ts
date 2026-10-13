@@ -14,12 +14,19 @@ export async function GET(request: NextRequest) {
       type === "magiclink")
   ) {
     const db = await serverClient();
-    const { error } = await db.auth.verifyOtp({ token_hash, type });
+    const { data, error } = await db.auth.verifyOtp({ token_hash, type });
     if (!error) {
       const target = new URL(next, url.origin);
       const dest =
         target.origin === url.origin ? target : new URL("/dashboard", url.origin);
       const response = NextResponse.redirect(dest);
+      if (process.env.CLIENTDESK_LOCAL_PG === "true" && data?.user) {
+        response.cookies.set(
+          "cd-local-session",
+          JSON.stringify({ id: data.user.id, email: data.user.email }),
+          { path: "/", sameSite: "lax" },
+        );
+      }
       response.headers.set("Cache-Control", "private, no-store");
       return response;
     }

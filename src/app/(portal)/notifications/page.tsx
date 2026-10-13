@@ -22,6 +22,8 @@ const kindFilters: { value: string; label: string }[] = [
   { value: "review", label: "Reviews" },
   { value: "decision", label: "Decisions" },
   { value: "comment", label: "Comments" },
+  { value: "project", label: "Project updates" },
+  { value: "invitation", label: "Invitations" },
 ];
 
 export default async function Notifications({
@@ -32,7 +34,13 @@ export default async function Notifications({
   const { filter: rawFilter, kind: rawKind, page: rawPage } =
     await searchParams;
   const unreadOnly = rawFilter === "unread";
-  const currentKind = ["review", "decision", "comment"].includes(rawKind || "")
+  const currentKind = [
+    "review",
+    "decision",
+    "comment",
+    "project",
+    "invitation",
+  ].includes(rawKind || "")
     ? rawKind!
     : "";
 
@@ -80,7 +88,9 @@ export default async function Notifications({
   check(listResult.error);
 
   const notices = (listResult.data ?? []) as Notice[];
-  const projectIds = [...new Set(notices.map((n) => n.project_id))];
+  const projectIds = [
+    ...new Set(notices.map((n) => n.project_id).filter((id): id is string => Boolean(id))),
+  ];
   const projectsResult = projectIds.length
     ? await db.from("projects").select("id,name").in("id", projectIds)
     : { data: [], error: null };
@@ -251,7 +261,9 @@ export default async function Notifications({
             role="list"
           >
             {notices.map((n) => {
-              const assocProject = projectById.get(n.project_id);
+              const assocProject = n.project_id
+                ? projectById.get(n.project_id)
+                : undefined;
               const unread = !n.read_at;
               const KindIcon =
                 n.kind === "decision"
@@ -312,7 +324,13 @@ export default async function Notifications({
                     </div>
 
                     <Link
-                      href={"/projects/" + n.project_id}
+                      href={
+                        n.project_id
+                          ? "/projects/" + n.project_id
+                          : n.kind === "invitation"
+                            ? "/settings"
+                            : "/projects"
+                      }
                       className="notification-message-link"
                     >
                       <span className="command-activity-message">

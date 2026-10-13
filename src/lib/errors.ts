@@ -1,14 +1,24 @@
 // Only explicitly safe application messages may cross the server-action boundary.
 export class PublicError extends Error {}
 const businessMessages = new Set([
-  "Not allowed", "Reply must belong to the same project",
+  "Not allowed",
+  "Reply must belong to the same project",
   "This invitation is invalid, expired, or belongs to another email address.",
-  "Invitation already used", "Only the Aiquor team can submit work",
-  "Project is unavailable or read-only", "This milestone is already submitted or approved",
-  "Only the assigned client can review this work", "This submission already has a decision",
-  "Invalid decision", "The uploaded file could not be verified",
+  "Invitation already used",
+  "Only the Aiquor team can submit work",
+  "Project is unavailable or read-only",
+  "This milestone is already submitted or approved",
+  "Only the assigned client can review this work",
+  "This submission already has a decision",
+  "Invalid decision",
+  "The uploaded file could not be verified",
+  "Please sign in first.",
+  "This workspace URL slug is already taken. Please choose another.",
+  "You do not have access to that company workspace.",
+  "This team invitation is invalid, expired, or belongs to another email address.",
+  "This team invitation was already used.",
 ]);
-export function operationMessage(error: {message?: string; code?: string}): string {
+export function operationMessage(error: { message?: string; code?: string }): string {
   if (error.code === "PGRST116") return "The record was not changed. It may no longer be available.";
   if (error.code === "42501" || /row-level security|permission denied/i.test(error.message ?? ""))
     return "You don’t have permission to modify this record, or the project is read-only.";
@@ -17,3 +27,4 @@ export function operationMessage(error: {message?: string; code?: string}): stri
     return "The change could not be saved. Please check your input and try again.";
   return "The change could not be saved. Please try again.";
 }
+

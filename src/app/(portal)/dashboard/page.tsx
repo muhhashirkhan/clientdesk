@@ -26,7 +26,10 @@ import type {
   Client,
 } from "@/lib/types";
 
-type DashboardMilestone = Pick<Milestone, "id" | "project_id" | "title" | "status" | "due_date" | "created_at">;
+type DashboardMilestone = Pick<
+  Milestone,
+  "id" | "project_id" | "title" | "status" | "due_date" | "created_at"
+>;
 
 type ClientSummary = Pick<Client, "id" | "name" | "company">;
 
@@ -76,8 +79,8 @@ function getProjectNextAction(
 }
 
 export default async function Dashboard() {
-  const { db, profile } = await session();
-  const admin = profile.role === "admin";
+  const { db, profile, company, workspaceRole } = await session();
+  const admin = workspaceRole !== "client" || profile.role === "admin";
 
   const results = await Promise.all([
     db
@@ -114,7 +117,7 @@ export default async function Dashboard() {
       .eq("archived", false)
       .order("updated_at", { ascending: false })
       .limit(24),
-    Promise.resolve({data: [], error: null}),
+    Promise.resolve({ data: [], error: null }),
     db
       .from("projects")
       .select("id,name,status,deadline,archived")
@@ -138,6 +141,11 @@ export default async function Dashboard() {
       .from("notifications")
       .select("id", { count: "exact", head: true })
       .is("read_at", null),
+    db
+      .from("project_tasks")
+      .select("id,project_id,title,status,priority,due_date,assignee_name")
+      .order("created_at", { ascending: false })
+      .limit(250),
   ]);
 
   results.forEach((r) => check(r.error));
@@ -149,11 +157,19 @@ export default async function Dashboard() {
 
   const allProjects = (results[4].data ?? []) as Project[];
   const milestoneResult = allProjects.length
-    ? await readAllRows<DashboardMilestone>((from, to) => db.from("milestones")
-        .select("id,project_id,title,status,due_date,created_at")
-        .in("project_id", allProjects.map((project) => project.id))
-        .order("created_at").order("id").range(from, to))
-    : {data: [], error: null};
+    ? await readAllRows<DashboardMilestone>((from, to) =>
+        db
+          .from("milestones")
+          .select("id,project_id,title,status,due_date,created_at")
+          .in(
+            "project_id",
+            allProjects.map((project) => project.id),
+          )
+          .order("created_at")
+          .order("id")
+          .range(from, to),
+      )
+    : { data: [], error: null };
   check(milestoneResult.error);
   const milestones = milestoneResult.data;
   const deadlines = (results[6].data ?? []) as Project[];
@@ -161,6 +177,17 @@ export default async function Dashboard() {
   const submissions = (results[8].data ?? []) as Submission[];
   const clients = (results[9].data ?? []) as ClientSummary[];
   const unreadNoticesCount = results[10].count ?? 0;
+  const tasks = (results[11].data ?? []) as {
+    id: string;
+    project_id: string;
+    title: string;
+    status: string;
+    priority: string;
+    due_date: string | null;
+    assignee_name: string;
+  }[];
+  const doneTasksCount = tasks.filter((t) => t.status === "done").length;
+  const openTasksCount = tasks.filter((t) => t.status !== "done").length;
 
   const pending = admin
     ? null
@@ -321,15 +348,19 @@ export default async function Dashboard() {
       <header className="page-heading command-header obsidian-panel">
         <div className="command-header-main">
           <div className="command-eyebrow-row">
-            <p className="eyebrow">YOUR WORKSPACE, AT A GLANCE</p>
+            <p className="eyebrow">
+              {company?.name
+                ? `${company.name.toUpperCase()} · ${workspaceRole.toUpperCase()} WORKSPACE`
+                : "YOUR WORKSPACE, AT A GLANCE"}
+            </p>
           </div>
           <h1>
             {`Hello${firstName ? ", " + firstName : ""}. Let’s move things forward.`}
           </h1>
           <p className="muted">
             {admin
-              ? "A clear picture of every project and what needs your attention."
-              : "Your projects, next steps and conversations with Aiquor."}
+              ? "A clear picture of every project, team velocity, and what needs your attention."
+              : `Your projects, next steps and conversations with ${company?.name || "Aiquor"}.`}
           </p>
           <div className="command-summary-pills" aria-label="Workspace summary">
             <Link href="/projects" className="command-summary-pill">
@@ -360,6 +391,25 @@ export default async function Dashboard() {
                 </>
               )}
             </Link>
+            {tasks.length > 0 && (
+              <Link href="/projects" className="command-summary-pill">
+                <CheckCheck size={13} aria-hidden="true" />
+                <span>
+                  <strong>{doneTasksCount}</strong>/{tasks.length} tasks done
+                </span>
+              </Link>
+            )}
+            {company &&
+              !company.onboarding_completed &&
+              (workspaceRole === "owner" || workspaceRole === "admin") && (
+                <Link
+                  href="/onboarding"
+                  className="command-summary-pill is-attention"
+                >
+                  <Sparkles size={13} aria-hidden="true" />
+                  <span>Complete workspace setup →</span>
+                </Link>
+              )}
             {unreadNoticesCount > 0 && (
               <Link
                 href="/notifications"
@@ -423,7 +473,7 @@ export default async function Dashboard() {
             </p>
           </div>
           <div className="command-invite-actions">
-            {pending.data.map((invitation) => (
+            {(pending.data as { id: string }[]).map((invitation) => (
               <Link
                 key={invitation.id}
                 className="button primary glass-button"
@@ -866,7 +916,7 @@ export default async function Dashboard() {
                   <div className="command-portfolio-cell">
                     <span className="portfolio-cell-label">
                       <CalendarDays size={14} aria-hidden="true" />
-                      Deadline health
+                      Deadline &amp; task velocity
                     </span>
                     <div className="portfolio-cell-pills">
                       <span>
@@ -878,6 +928,12 @@ export default async function Dashboard() {
                         }
                       >
                         <strong>{overdueDeadlinesCount}</strong> Overdue
+                      </span>
+                      <span>
+                        <strong>{doneTasksCount}</strong> Tasks done
+                      </span>
+                      <span>
+                        <strong>{openTasksCount}</strong> Open tasks
                       </span>
                     </div>
                   </div>
@@ -1055,7 +1111,9 @@ export default async function Dashboard() {
             {notices.length > 0 ? (
               <div className="command-activity-timeline" role="list">
                 {notices.map((n) => {
-                  const assocProject = projectById.get(n.project_id);
+                  const assocProject = n.project_id
+                    ? projectById.get(n.project_id)
+                    : undefined;
                   const unread = !n.read_at;
                   const KindIcon =
                     n.kind === "decision"
@@ -1068,7 +1126,13 @@ export default async function Dashboard() {
                     <Link
                       className={`list-row command-activity-item ${unread ? "is-unread" : "is-read"}`}
                       key={n.id}
-                      href={"/projects/" + n.project_id}
+                      href={
+                        n.project_id
+                          ? "/projects/" + n.project_id
+                          : n.kind === "invitation"
+                            ? "/settings"
+                            : "/projects"
+                      }
                       role="listitem"
                     >
                       <span

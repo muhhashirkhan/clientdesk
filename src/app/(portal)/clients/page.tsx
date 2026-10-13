@@ -70,7 +70,11 @@ export default async function Clients({
 
   const clients = (clientsRes.data ?? []) as Client[];
   const clientIds = clients.map((c) => c.id);
-  const allMembers = allMembersRes.data ?? [];
+  const allMembers = (allMembersRes.data ?? []) as {
+    client_id: string;
+    user_id: string;
+    joined_at: string;
+  }[];
   const pageMembers = allMembers.filter((m) => clientIds.includes(m.client_id));
   const pageMemberUserIds = [...new Set(pageMembers.map((m) => m.user_id))];
 
@@ -105,11 +109,19 @@ export default async function Clients({
   >[];
   const invites = (invitesRes.data ?? []) as Invitation[];
   const latestInviteByClient = selectLatestInvitations(invites);
-  const allProfiles = profilesRes.data ?? [];
+  const allProfiles = (profilesRes.data ?? []) as {
+    id: string;
+    full_name: string;
+  }[];
 
   const activeClientIds = new Set(allMembers.map((m) => m.client_id));
+  const activeInvites = (activeInvitesRes.data ?? []) as {
+    id: string;
+    client_id: string;
+    expires_at: string;
+  }[];
   const pendingInvitesCount = new Set(
-    (activeInvitesRes.data ?? [])
+    activeInvites
       .filter((i) => !activeClientIds.has(i.client_id))
       .map((i) => i.client_id),
   ).size;

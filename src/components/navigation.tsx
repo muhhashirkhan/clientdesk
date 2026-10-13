@@ -6,11 +6,12 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  useTransition,
   type ReactNode,
 } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -26,10 +27,13 @@ import {
   ShieldCheck,
   ArrowUpRight,
   ChevronRight,
+  Building2,
+  Sparkles,
 } from "lucide-react";
 import { Form, RefreshButton } from "./forms";
-import { signOut } from "@/app/actions";
+import { signOut, switchWorkspace } from "@/app/actions";
 import { Ambient } from "./ambient";
+import type { WorkspaceRole } from "@/lib/types";
 
 const SIDEBAR_STORAGE_KEY = "obsidian-sidebar-collapsed";
 const MOBILE_BREAKPOINT = 900;
@@ -77,6 +81,13 @@ function getRouteMeta(pathname: string): {
       sectionLabel: "Workspace",
       sectionHref: "/dashboard",
       pageTitle: "Overview",
+    };
+  }
+  if (pathname === "/onboarding") {
+    return {
+      sectionLabel: "Workspace",
+      sectionHref: "/dashboard",
+      pageTitle: "Company Onboarding",
     };
   }
   if (pathname === "/projects/new") {
@@ -162,6 +173,9 @@ export function Navigation({
       icon: Bell,
       badge: unread > 0 ? unread : undefined,
     },
+    ...(admin
+      ? [{ href: "/onboarding", label: "Setup & Onboarding", icon: Sparkles }]
+      : []),
     { href: "/settings", label: "Settings", icon: Settings },
   ];
 
@@ -225,15 +239,26 @@ export function WorkspaceShell({
   unread,
   fullName,
   email,
+  companyName = "Aiquor",
+  activeCompanyId = "",
+  workspaceRole = admin ? "owner" : "client",
+  companies = [],
   children,
 }: {
   admin: boolean;
   unread: number;
   fullName: string;
   email: string;
+  companyName?: string;
+  companySlug?: string;
+  activeCompanyId?: string;
+  workspaceRole?: WorkspaceRole;
+  companies?: { id: string; name: string; slug: string }[];
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [switching, startTransition] = useTransition();
   const collapsed = useSyncExternalStore(
     subscribeSidebarCollapsed,
     getSidebarCollapsedSnapshot,
@@ -264,7 +289,6 @@ export function WorkspaceShell({
     setOpenPathname((prev) => (prev === pathname ? null : pathname));
   }, [pathname]);
 
-  // Close mobile drawer if viewport resizes above mobile/tablet breakpoint
   useEffect(() => {
     const onResize = () => {
       if (window.innerWidth > MOBILE_BREAKPOINT) {
@@ -275,7 +299,6 @@ export function WorkspaceShell({
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Keyboard shortcut (Cmd+B / Ctrl+B) for desktop sidebar toggle + Escape & Focus Trap for mobile drawer
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
@@ -297,7 +320,7 @@ export function WorkspaceShell({
 
       if (e.key === "Tab" && mobileOpen && sidebarRef.current) {
         const focusable = sidebarRef.current.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
         );
         if (focusable.length === 0) return;
         const first = focusable[0];
@@ -316,7 +339,6 @@ export function WorkspaceShell({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [mobileOpen, toggleDesktopCollapse, toggleMobileDrawer]);
 
-  // Lock body scroll and focus close button when mobile drawer opens
   useEffect(() => {
     if (!mobileOpen) {
       document.body.style.removeProperty("overflow");
@@ -343,9 +365,26 @@ export function WorkspaceShell({
     }
   };
 
+  const handleWorkspaceChange = (nextCompanyId: string) => {
+    if (!nextCompanyId || nextCompanyId === activeCompanyId) return;
+    startTransition(async () => {
+      const form = new FormData();
+      form.set("company_id", nextCompanyId);
+      await switchWorkspace({ ok: false, message: "" }, form);
+      router.refresh();
+    });
+  };
+
   const displayName = fullName || "Your account";
   const displayInitial = (fullName || email || "A").slice(0, 1).toUpperCase();
-  const roleLabel = admin ? "Aiquor team" : "Client";
+  const roleLabel =
+    workspaceRole === "owner"
+      ? "Workspace Owner"
+      : workspaceRole === "admin"
+        ? "Workspace Admin"
+        : workspaceRole === "member"
+          ? "Team Member"
+          : "Client";
   const { sectionLabel, sectionHref, pageTitle } = getRouteMeta(pathname);
 
   return (
@@ -354,7 +393,6 @@ export function WorkspaceShell({
       data-sidebar-collapsed={collapsed ? "true" : "false"}
       data-mobile-nav-open={mobileOpen ? "true" : "false"}
     >
-      {/* Mobile / Tablet Backdrop Overlay */}
       <div
         className={
           mobileOpen ? "sidebar-backdrop is-open" : "sidebar-backdrop"
@@ -369,13 +407,12 @@ export function WorkspaceShell({
         className={collapsed ? "sidebar is-collapsed" : "sidebar"}
         aria-label="Workspace navigation"
       >
-        {/* Top Brand Section */}
         <div className="sidebar-brand-bar">
           <Link
             href="/dashboard"
-            aria-label="Aiquor ClientDesk home"
+            aria-label={`${companyName} ClientDesk home`}
             onClick={closeMobileDrawer}
-            data-tooltip={collapsed ? "Aiquor ClientDesk" : undefined}
+            data-tooltip={collapsed ? `${companyName} · ClientDesk` : undefined}
             className="sidebar-brand-link"
           >
             <span className="logo">
@@ -388,7 +425,9 @@ export function WorkspaceShell({
                 />
               </span>
               <span className="sidebar-brand-copy">
-                <small className="sidebar-brand-eyebrow">AIQUOR</small>
+                <small className="sidebar-brand-eyebrow">
+                  {companyName.toUpperCase().slice(0, 22)}
+                </small>
                 <span className="sidebar-brand-title">CLIENTDESK</span>
               </span>
             </span>
@@ -405,7 +444,60 @@ export function WorkspaceShell({
           </button>
         </div>
 
-        {/* Navigation Links */}
+        {/* Multi-Company Workspace Switcher */}
+        {!collapsed && companies.length > 0 && (
+          <div
+            className="sidebar-workspace-switcher"
+            style={{ padding: "0 14px 10px" }}
+          >
+            <label
+              htmlFor="workspace-switcher-select"
+              className="sr-only"
+            >
+              Active company workspace
+            </label>
+            <div
+              className="glass-container"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "7px 10px",
+                borderRadius: 10,
+                fontSize: 12,
+              }}
+            >
+              <Building2 size={14} aria-hidden="true" />
+              <select
+                id="workspace-switcher-select"
+                aria-label="Switch company workspace"
+                value={activeCompanyId}
+                disabled={switching}
+                onChange={(e) => handleWorkspaceChange(e.target.value)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "inherit",
+                  fontWeight: 600,
+                  width: "100%",
+                  cursor: "pointer",
+                  outline: "none",
+                }}
+              >
+                {companies.map((c) => (
+                  <option
+                    key={c.id}
+                    value={c.id}
+                    style={{ background: "#06110d", color: "#ecfdf5" }}
+                  >
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
         <Navigation
           admin={admin}
           unread={unread}
@@ -413,19 +505,18 @@ export function WorkspaceShell({
           onNavigate={closeMobileDrawer}
         />
 
-        {/* Bottom Workspace Controls & Account Card */}
         <div className="sidebar-footer">
           <div className="sidebar-note glass-container">
             <div className="sidebar-note-head">
               <ShieldCheck size={16} />
-              <span>Encrypted workspace</span>
+              <span>Isolated workspace</span>
             </div>
             <p>
-              A shared space. <strong>Your work, protected.</strong>
+              <strong>{companyName}</strong> · {roleLabel}
             </p>
-            <a href="https://getaiquor.com" target="_blank" rel="noreferrer">
-              Visit Aiquor <ArrowUpRight size={13} />
-            </a>
+            <Link href="/settings">
+              Workspace settings <ArrowUpRight size={13} />
+            </Link>
           </div>
 
           <button
@@ -536,7 +627,7 @@ export function WorkspaceShell({
             <span className="topbar-workspace-pill">
               <i className="live-dot" aria-hidden="true" />
               <span>
-                {admin ? "Team workspace" : "Your private workspace"}
+                {companyName} · {roleLabel}
               </span>
             </span>
 
@@ -582,7 +673,9 @@ export function WorkspaceShell({
         </main>
 
         <footer className="workspace-footer">
-          <span>ClientDesk by Aiquor</span>
+          <span>
+            {companyName} · Powered by ClientDesk
+          </span>
           <span>Made for working together.</span>
         </footer>
       </div>

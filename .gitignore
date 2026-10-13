@@ -8,7 +8,9 @@ out/
 playwright-report/
 test-results/
 
-# Supabase CLI local project state
+# Supabase CLI & local PGlite project state
 supabase/.temp/
 supabase/.branches/
+.pglite-data/
+.pglite-storage/
 .vercel

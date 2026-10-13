@@ -67,8 +67,15 @@ export default async function Login({
       </div>
 
       <p className="auth-bottom auth-stagger-4">
-        New to ClientDesk?{" "}
-        <span>Use the invitation from Aiquor to set up your account.</span>
+        Launching a business workspace?{" "}
+        <Link href="/register" className="forgot-link">
+          Register your company →
+        </Link>
+        <br />
+        <span>
+          Invited clients can also use their invitation link to join an existing
+          workspace.
+        </span>
       </p>
     </div>
   );
