@@ -17,7 +17,7 @@ import {
 import { readAllRows } from "@/lib/read-all";
 import { session, check } from "@/lib/data";
 import { Empty, NewProjectLink, Badge } from "@/components/ui";
-import { date, label, progress, timestamp } from "@/lib/utils";
+import { date, dueLabel, label, progress, timestamp } from "@/lib/utils";
 import type {
   Project,
   Milestone,
@@ -557,7 +557,7 @@ export default async function Dashboard() {
                         <footer className="command-project-footer">
                           <span className="command-project-due">
                             <CalendarDays size={13} aria-hidden="true" />
-                            Due {date(p.deadline)}
+                            {dueLabel(p.deadline)}
                           </span>
                           <span
                             className={`command-next-action tone-${nextAction.tone}`}
