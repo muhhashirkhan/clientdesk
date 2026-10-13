@@ -21,6 +21,11 @@ export default function Callback() {
         );
         return;
       }
+      if (!params.get("token_hash") && !params.get("code") &&
+          !(hash.get("access_token") && hash.get("refresh_token"))) {
+        setError("This link is incomplete. Please use the link in your latest email.");
+        return;
+      }
       const db = browserClient();
       let failure: Error | null = null;
       const type = params.get("type");

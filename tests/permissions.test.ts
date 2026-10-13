@@ -80,6 +80,15 @@ test("PostgreSQL policies enforce the complete review workflow and client isolat
       [clientA, emails[alice], admin],
     )
   )[0].id;
+  await t.test("invalid, expired and revoked invitations cannot grant membership", async () => {
+    await assert.rejects(asUser(alice, "select accept_invitation($1)", ["99999999-9999-4999-8999-999999999999"]), /invalid, expired/);
+    for (const column of ["expires_at", "revoked_at"]) {
+      const id = (await asUser<{id: string}>(admin, "insert into invitations(client_id,email,invited_by) values($1,$2,$3) returning id", [clientA, emails[alice], admin]))[0].id;
+      await db.query(`update invitations set ${column} = now() - interval '1 day' where id=$1`, [id]);
+      await assert.rejects(asUser(alice, "select accept_invitation($1)", [id]), /invalid, expired/);
+      assert.deepEqual(await asUser(alice, "select * from projects"), []);
+    }
+  });
   await t.test(
     "an invitation cannot be claimed by a different account",
     async () => {

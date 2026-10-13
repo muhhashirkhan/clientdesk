@@ -213,6 +213,7 @@ export async function inviteClient(_: ActionResult, form: FormData) {
   return run(async () => {
     const clientId = uuid.parse(form.get("client_id"));
     const { db, user } = await account(true);
+    const origin = appUrl();
     const client = await db
       .from("clients")
       .select("*")
@@ -246,7 +247,7 @@ export async function inviteClient(_: ActionResult, form: FormData) {
     }
     const next = "/accept-invitation?invitation=" + invitation.id;
     const redirectTo =
-      appUrl() + "/auth/callback?next=" + encodeURIComponent(next);
+      origin + "/auth/callback?next=" + encodeURIComponent(next);
     const admin = adminClient();
     const sent = await admin.auth.admin.inviteUserByEmail(client.data.email, {
       redirectTo,
