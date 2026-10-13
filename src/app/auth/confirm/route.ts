@@ -15,9 +15,18 @@ export async function GET(request: NextRequest) {
   ) {
     const db = await serverClient();
     const { error } = await db.auth.verifyOtp({ token_hash, type });
-    if (!error) return NextResponse.redirect(new URL(next, url.origin));
+    if (!error) {
+      const target = new URL(next, url.origin);
+      const dest =
+        target.origin === url.origin ? target : new URL("/dashboard", url.origin);
+      const response = NextResponse.redirect(dest);
+      response.headers.set("Cache-Control", "private, no-store");
+      return response;
+    }
   }
-  return NextResponse.redirect(
+  const fallback = NextResponse.redirect(
     new URL("/login?error=This+email+link+is+invalid+or+expired.", url.origin),
   );
+  fallback.headers.set("Cache-Control", "private, no-store");
+  return fallback;
 }

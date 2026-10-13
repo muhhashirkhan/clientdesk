@@ -10,7 +10,9 @@ export function adminClient() {
   );
 }
 export function appUrl() {
-  const url = process.env.NEXT_PUBLIC_APP_URL;
+  const url =
+    process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL;
   if (!url) throw new Error("The portal address is not configured yet.");
-  return url.replace(/\/$/, "");
+  return url.trim().replace(/\/$/, "");
 }
+

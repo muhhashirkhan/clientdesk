@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect, notFound } from "next/navigation";
 import { configured, serverClient } from "./supabase/server";
+import { uuid } from "./validation";
 import type {
   Profile,
   Project,
@@ -11,8 +12,16 @@ import type {
   ProjectFile,
   Comment,
 } from "./types";
-export function check(error: { message: string } | null) {
-  if (error) throw new Error(error.message);
+export function check(error: { message: string; code?: string } | null) {
+  if (!error) return;
+  if (
+    /row-level security|permission denied|violates|syntax|PGRST|schema cache/i.test(
+      error.message,
+    )
+  ) {
+    throw new Error("Workspace data could not be loaded. Please try again.");
+  }
+  throw new Error(error.message);
 }
 export const session = cache(async () => {
   if (!configured()) redirect("/login");
@@ -40,6 +49,7 @@ export async function adminSession() {
   return s;
 }
 export async function projectData(id: string) {
+  if (!uuid.safeParse(id).success) notFound();
   const s = await session();
   const result = await s.db
     .from("projects")

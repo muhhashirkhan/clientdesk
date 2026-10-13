@@ -1,5 +1,6 @@
 import { Field, Textarea } from "./forms";
 import type { Client, Project } from "@/lib/types";
+
 export function ProjectFields({
   clients,
   project,
@@ -8,13 +9,14 @@ export function ProjectFields({
   project?: Project;
 }) {
   return (
-    <>
+    <div className="project-fields-stack">
       <Field
         label="Project name"
         name="name"
         value={project?.name}
         maxLength={160}
-        placeholder="e.g. Website redesign"
+        placeholder="e.g. Website redesign & brand architecture"
+        help="Clear, recognizable title visible to your team and the assigned client."
       />
       <div className="form-grid">
         <label className="field">
@@ -34,6 +36,7 @@ export function ProjectFields({
               </option>
             ))}
           </select>
+          <small>Determines which client organization can access this workspace.</small>
         </label>
         <Field
           label="Deadline"
@@ -41,6 +44,7 @@ export function ProjectFields({
           type="date"
           value={project?.deadline || ""}
           required={false}
+          help="Target completion date for final milestone sign-off."
         />
       </div>
       <Textarea
@@ -58,7 +62,9 @@ export function ProjectFields({
           <option value="on_hold">On hold</option>
           <option value="completed">Completed</option>
         </select>
+        <small>Completed projects automatically become read-only records.</small>
       </label>
-    </>
+    </div>
   );
 }
+

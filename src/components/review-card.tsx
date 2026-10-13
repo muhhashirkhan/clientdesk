@@ -1,10 +1,17 @@
 import Link from "next/link";
-import { ArrowUpRight, CheckCheck } from "lucide-react";
+import {
+  ArrowUpRight,
+  CheckCheck,
+  AlertTriangle,
+  Clock3,
+  UserCheck,
+} from "lucide-react";
 import { Form, Hidden, Textarea } from "./forms";
 import { Badge } from "./ui";
 import { decideSubmission } from "@/app/actions";
 import { timestamp } from "@/lib/utils";
 import type { Submission, Decision } from "@/lib/types";
+
 export function ReviewCard({
   submission,
   decision,
@@ -20,41 +27,81 @@ export function ReviewCard({
   admin: boolean;
   readOnly?: boolean;
 }) {
+  const isChangesRequested = decision?.decision === "changes_requested";
+
   return (
-    <article className="panel review-card">
+    <article
+      className={`panel review-card glass-container status-${submission.status}`}
+    >
       <div className="card-top">
         <div>
-          <p className="eyebrow">{projectName || "MILESTONE REVIEW"}</p>
+          {projectName ? (
+            <Link
+              href={"/projects/" + submission.project_id}
+              className="eyebrow review-project-link"
+            >
+              {projectName} <ArrowUpRight size={12} aria-hidden="true" />
+            </Link>
+          ) : (
+            <p className="eyebrow">MILESTONE REVIEW</p>
+          )}
           <h2>{title}</h2>
         </div>
         <Badge value={submission.status} />
       </div>
-      <p className="preserve">{submission.notes}</p>
-      {submission.preview_url && (
-        <a
-          className="button secondary"
-          href={submission.preview_url}
-          target="_blank"
-          rel="noopener noreferrer"
+
+      <div className="review-notes-box">
+        <span className="review-notes-label">DELIVERABLE NOTES</span>
+        <p className="preserve">{submission.notes}</p>
+      </div>
+
+      <div className="review-links-row">
+        {submission.preview_url && (
+          <a
+            className="button secondary glass-button"
+            href={submission.preview_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open preview <ArrowUpRight size={16} />
+          </a>
+        )}
+        <Link
+          className="text-link"
+          href={"/projects/" + submission.project_id + "?tab=files"}
         >
-          Open preview <ArrowUpRight size={16} />
-        </a>
-      )}
+          View project files <ArrowUpRight size={14} />
+        </Link>
+        {projectName && (
+          <Link
+            className="text-link"
+            href={"/projects/" + submission.project_id + "?tab=milestones"}
+          >
+            View milestone <ArrowUpRight size={14} />
+          </Link>
+        )}
+      </div>
+
       <div className="review-meta">
-        <span>Submitted by {submission.author_name}</span>
+        <span>
+          <UserCheck size={13} /> Submitted by {submission.author_name}
+        </span>
         <time dateTime={submission.created_at}>
-          {timestamp(submission.created_at)}
+          <Clock3 size={13} /> {timestamp(submission.created_at)}
         </time>
       </div>
-      <Link
-        className="text-link"
-        href={"/projects/" + submission.project_id + "?tab=files"}
-      >
-        View project files <ArrowUpRight size={14} />
-      </Link>
+
       {decision ? (
-        <div className="decision-record">
-          <CheckCheck size={19} />
+        <div
+          className={`decision-record ${
+            isChangesRequested ? "is-changes-requested" : "is-approved"
+          }`}
+        >
+          {isChangesRequested ? (
+            <AlertTriangle size={19} />
+          ) : (
+            <CheckCheck size={19} />
+          )}
           <div>
             <strong>
               {decision.actor_name}{" "}
@@ -81,7 +128,7 @@ export function ReviewCard({
               <Hidden name="choice" value="approved" />
               <Hidden name="feedback" value="" />
             </Form>
-            <details>
+            <details className="review-change-details">
               <summary>Request changes</summary>
               <Form action={decideSubmission} submit="Send change request">
                 <Hidden name="submission" value={submission.id} />
@@ -106,3 +153,4 @@ export function ReviewCard({
     </article>
   );
 }
+

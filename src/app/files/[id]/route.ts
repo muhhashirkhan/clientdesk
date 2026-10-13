@@ -32,5 +32,7 @@ export async function GET(
     });
   const response = NextResponse.redirect(signed.data.signedUrl, 303);
   response.headers.set("Cache-Control", "private, no-store");
+  response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  response.headers.set("X-Content-Type-Options", "nosniff");
   return response;
 }

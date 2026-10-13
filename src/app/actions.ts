@@ -21,8 +21,26 @@ const saved = (message: string, redirectTo?: string): ActionResult => ({
   message,
   redirectTo,
 });
-function must(error: { message: string } | null) {
-  if (error) throw new Error(error.message);
+function must(error: { message: string; code?: string } | null) {
+  if (!error) return;
+  if (error.code === "PGRST116") {
+    throw new Error(
+      "The record was not changed. It may no longer be available.",
+    );
+  }
+  if (/row-level security|permission denied/i.test(error.message)) {
+    throw new Error(
+      "You don’t have permission to modify this record, or the project is read-only.",
+    );
+  }
+  if (
+    /violates foreign key|violates check constraint|invalid input syntax|PGRST|schema cache/i.test(
+      error.message,
+    )
+  ) {
+    throw new Error("The change could not be saved. Please check your input and try again.");
+  }
+  throw new Error(error.message);
 }
 async function run(fn: () => Promise<ActionResult>): Promise<ActionResult> {
   try {
@@ -61,9 +79,17 @@ function refresh() {
   revalidatePath("/", "layout");
 }
 async function changed(
-  query: PromiseLike<{ data: unknown; error: { message: string } | null }>,
+  query: PromiseLike<{
+    data: unknown;
+    error: { message: string; code?: string } | null;
+  }>,
 ) {
   const result = await query;
+  if (result.error?.code === "PGRST116") {
+    throw new Error(
+      "The record was not changed. It may no longer be available.",
+    );
+  }
   must(result.error);
   if (!result.data)
     throw new Error(
@@ -314,6 +340,20 @@ export async function updateProject(_: ActionResult, form: FormData) {
     const id = uuid.parse(form.get("id"));
     const v = projectSchema.parse(input(form));
     const { db } = await account(true);
+    const current = await db
+      .from("projects")
+      .select("archived")
+      .eq("id", id)
+      .maybeSingle();
+    must(current.error);
+    if (!current.data)
+      throw new Error(
+        "The record was not changed. It may no longer be available.",
+      );
+    if (current.data.archived)
+      throw new Error(
+        "Restore this archived project before editing its details.",
+      );
     await changed(
       db.from("projects").update(v).eq("id", id).select("id").single(),
     );
@@ -445,12 +485,21 @@ export async function deleteFile(_: ActionResult, form: FormData) {
     const { db, user, profile } = await account();
     const file = await db
       .from("project_files")
-      .select("*")
+      .select("id,project_id,storage_path,uploaded_by")
       .eq("id", id)
-      .single();
+      .maybeSingle();
     must(file.error);
+    if (!file.data) throw new Error("File not found.");
     if (file.data.uploaded_by !== user.id && profile.role !== "admin")
       throw new Error("You can only delete files you uploaded.");
+    const proj = await db
+      .from("projects")
+      .select("archived,status")
+      .eq("id", file.data.project_id)
+      .maybeSingle();
+    must(proj.error);
+    if (!proj.data || proj.data.archived || proj.data.status === "completed")
+      throw new Error("This project is read-only.");
     const removed = await db.storage
       .from("project-files")
       .remove([file.data.storage_path]);

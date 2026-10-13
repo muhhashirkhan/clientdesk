@@ -376,6 +376,87 @@ test("PostgreSQL policies enforce the complete review workflow and client isolat
     },
   );
   await t.test(
+    "completed projects enforce read-only rules on milestones, comments and storage",
+    async () => {
+      await asUser(
+        admin,
+        "update projects set status='completed' where id=$1",
+        [project],
+      );
+      await assert.rejects(
+        asUser(
+          admin,
+          "insert into milestones(project_id,title) values($1,'Late milestone')",
+          [project],
+        ),
+        /row-level security/,
+      );
+      await assert.rejects(
+        asUser(
+          alice,
+          "insert into comments(project_id,body) values($1,'Post-completion write')",
+          [project],
+        ),
+        /Not allowed/,
+      );
+      await assert.rejects(
+        asUser(
+          alice,
+          "insert into storage.objects(bucket_id,name) values('project-files',$1)",
+          [`${project}/${alice}/completed.txt`],
+        ),
+        /row-level security/,
+      );
+      await asUser(admin, "update projects set status='active' where id=$1", [
+        project,
+      ]);
+    },
+  );
+  await t.test(
+    "notifications and business settings enforce recipient and admin boundaries",
+    async () => {
+      const unreadBefore = await asUser<{ id: string; read_at: string | null }>(
+        alice,
+        "select id,read_at from notifications where read_at is null",
+      );
+      assert(unreadBefore.length > 0);
+      await asUser(
+        alice,
+        "update notifications set read_at=now() where id=$1",
+        [unreadBefore[0].id],
+      );
+      const afterMark = await asUser<{ read_at: string | null }>(
+        alice,
+        "select read_at from notifications where id=$1",
+        [unreadBefore[0].id],
+      );
+      assert(afterMark[0].read_at !== null);
+      const unauthorizedBizUpdate = await asUser<{ id: boolean }>(
+        alice,
+        "update business_settings set name='Unauthorized' where id=true returning id",
+      );
+      assert.deepEqual(unauthorizedBizUpdate, []);
+      assert.equal(
+        (
+          await asUser<{ name: string }>(
+            alice,
+            "select name from business_settings where id=true",
+          )
+        )[0].name,
+        "Aiquor",
+      );
+      await asUser(
+        admin,
+        "update business_settings set name='Aiquor Studio' where id=true",
+      );
+      const biz = await asUser<{ name: string }>(
+        alice,
+        "select name from business_settings where id=true",
+      );
+      assert.equal(biz[0].name, "Aiquor Studio");
+    },
+  );
+  await t.test(
     "removing access revokes storage and cannot be undone by replaying an accepted invitation",
     async () => {
       await asUser(
@@ -396,5 +477,82 @@ test("PostgreSQL policies enforce the complete review workflow and client isolat
       );
     },
   );
+  await t.test(
+    "paginated history preserves invitations and approval decisions beyond 200 records",
+    async () => {
+      const reInvite = (
+        await asUser<{ id: string }>(
+          admin,
+          "insert into invitations(client_id,email,invited_by) values($1,$2,$3) returning id",
+          [clientA, emails[alice], admin],
+        )
+      )[0].id;
+      await asUser(alice, "select accept_invitation($1)", [reInvite]);
+
+      const oldInvite = (
+        await asUser<{ id: string }>(
+          admin,
+          "insert into invitations(client_id,email,invited_by) values($1,$2,$3) returning id",
+          [clientB, emails[bob], admin],
+        )
+      )[0].id;
+      await db.query(
+        "update invitations set created_at = now() - interval '3 days' where id = $1",
+        [oldInvite],
+      );
+      await db.query(
+        "insert into invitations(client_id,email,invited_by,created_at,revoked_at) select $1,$2,$3,now() - (g || ' seconds')::interval,now() from generate_series(1,210) g",
+        [clientA, emails[alice], admin],
+      );
+      const scopedInvites = await asUser<{ id: string; client_id: string }>(
+        admin,
+        "select id,client_id from invitations where client_id = any($1::uuid[]) order by created_at desc, id desc",
+        [[clientB]],
+      );
+      assert.equal(scopedInvites.length, 1);
+      assert.equal(scopedInvites[0].id, oldInvite);
+
+      await db.query(
+        `with gen as (
+           select g, gen_random_uuid() as sub_id
+           from generate_series(1, 205) g
+         ),
+         ins_sub as (
+           insert into public.submissions(id,milestone_id,project_id,notes,preview_url,submitted_by,author_name,status,created_at)
+           select sub_id, $1, $2, 'Batch deliverable ' || g, 'https://example.com/' || g, $3, 'Ada Admin', 'approved', now() - ((g + 10) || ' minutes')::interval
+           from gen
+           returning id
+         )
+         insert into public.decisions(submission_id,project_id,decision,feedback,actor_id,actor_name,created_at)
+         select sub_id, $2, 'approved', 'Approved batch ' || g, $4, 'Alice Client', now() - ((g + 9) || ' minutes')::interval
+         from gen`,
+        [milestone, project, admin, alice],
+      );
+
+      const totalApproved = (
+        await asUser<{ count: string }>(
+          alice,
+          "select count(*)::text as count from submissions where status='approved'",
+        )
+      )[0].count;
+      assert(Number(totalApproved) >= 206);
+
+      // Fetch the last page (records beyond #200) as authenticated client and verify each submission still resolves its immutable decision
+      const oldestPage = await asUser<{ id: string }>(
+        alice,
+        "select id from submissions where status='approved' order by created_at desc, id desc limit 24 offset 192",
+      );
+      assert(oldestPage.length >= 14);
+      const oldestIds = oldestPage.map((r) => r.id);
+      const matchedDecisions = await asUser<{ submission_id: string }>(
+        alice,
+        "select submission_id from decisions where submission_id = any($1::uuid[])",
+        [oldestIds],
+      );
+      assert.equal(matchedDecisions.length, oldestIds.length);
+    },
+  );
   await db.close();
 });
+
+

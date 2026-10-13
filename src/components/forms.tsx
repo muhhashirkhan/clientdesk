@@ -99,7 +99,7 @@ export function Field({
 }) {
   const id = useId();
   return (
-    <label className="field">
+    <label className="field" htmlFor={id}>
       {label}
       {!required && <span className="optional">Optional</span>}
       <input
@@ -139,10 +139,12 @@ export function Textarea({
   maxLength?: number;
   placeholder?: string;
 }) {
+  const id = useId();
   return (
-    <label className="field">
+    <label className="field" htmlFor={id}>
       {label}
       <textarea
+        id={id}
         name={name}
         defaultValue={value}
         rows={4}
@@ -177,18 +179,22 @@ export function UploadForm({
   userId: string;
 }) {
   const [busy, setBusy] = useState(false),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [isError, setIsError] = useState(false);
   const ref = useRef<HTMLFormElement>(null);
   const router = useRouter();
   async function upload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setMessage("");
+    setIsError(false);
     const file = new FormData(e.currentTarget).get("file");
     if (!(file instanceof File) || !file.size) {
+      setIsError(true);
       setMessage("Choose a non-empty file.");
       return;
     }
     if (file.size > 50 * 1024 * 1024) {
+      setIsError(true);
       setMessage("Choose a file under 50 MB.");
       return;
     }
@@ -216,10 +222,12 @@ export function UploadForm({
             : stored.error.message,
         );
       }
+      setIsError(false);
       setMessage("File uploaded and saved.");
       ref.current?.reset();
       router.refresh();
     } catch (error) {
+      setIsError(true);
       setMessage(
         error instanceof Error
           ? error.message
@@ -231,7 +239,7 @@ export function UploadForm({
   }
   return (
     <form ref={ref} onSubmit={upload} className="upload-form glass-container">
-      <Upload size={25} />
+      <Upload size={25} aria-hidden="true" />
       <div>
         <h3>Add files to this project</h3>
         <p>
@@ -250,14 +258,17 @@ export function UploadForm({
       />
       <button className="button primary glass-button" disabled={busy}>
         {busy ? (
-          <LoaderCircle className="spin" size={16} />
+          <LoaderCircle className="spin" size={16} aria-hidden="true" />
         ) : (
-          <Upload size={16} />
+          <Upload size={16} aria-hidden="true" />
         )}{" "}
         {busy ? "Uploading and saving…" : "Upload file"}
       </button>
       {message && (
-        <p role="status" className="form-message">
+        <p
+          role={isError ? "alert" : "status"}
+          className={`form-message ${isError ? "error" : "success"}`}
+        >
           {message}
         </p>
       )}

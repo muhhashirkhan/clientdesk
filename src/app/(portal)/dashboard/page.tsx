@@ -113,11 +113,12 @@ export default async function Dashboard() {
       .limit(24),
     db
       .from("milestones")
-      .select("*")
-      .order("created_at", { ascending: true }),
+      .select("id,project_id,title,status,due_date,created_at")
+      .order("created_at", { ascending: true })
+      .limit(500),
     db
       .from("projects")
-      .select("*")
+      .select("id,name,status,deadline,archived")
       .eq("archived", false)
       .neq("status", "completed")
       .not("deadline", "is", null)
@@ -130,10 +131,14 @@ export default async function Dashboard() {
       .limit(6),
     db
       .from("submissions")
-      .select("*")
+      .select("id,milestone_id,project_id,author_name,created_at,status")
       .order("created_at", { ascending: false })
       .limit(12),
     db.from("clients").select("id,name,company"),
+    db
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .is("read_at", null),
   ]);
 
   results.forEach((r) => check(r.error));
@@ -149,6 +154,7 @@ export default async function Dashboard() {
   const notices = (results[7].data ?? []) as Notice[];
   const submissions = (results[8].data ?? []) as Submission[];
   const clients = (results[9].data ?? []) as ClientSummary[];
+  const unreadNoticesCount = results[10].count ?? 0;
 
   const pending = admin
     ? null
@@ -182,6 +188,14 @@ export default async function Dashboard() {
     ...inMotionProjects,
     ...recentlyCompletedProjects,
   ].slice(0, 4);
+
+  const isSingleProject = featuredProjects.length === 1;
+  const projectGridMode =
+    featuredProjects.length === 1
+      ? "is-single"
+      : featuredProjects.length === 2
+        ? "is-pair"
+        : "is-multi";
 
   // Scope milestones & submissions to non-archived projects for accurate workspace telemetry
   const nonArchivedProjectIds = new Set(allProjects.map((p) => p.id));
@@ -239,7 +253,6 @@ export default async function Dashboard() {
     .slice(0, 4);
 
   const totalAttentionCount = awaitingReviewCount + changesRequestedCount;
-  const unreadNoticesCount = notices.filter((n) => !n.read_at).length;
 
   const stats = [
     {
@@ -303,10 +316,6 @@ export default async function Dashboard() {
         <div className="command-header-main">
           <div className="command-eyebrow-row">
             <p className="eyebrow">YOUR WORKSPACE, AT A GLANCE</p>
-            <span className="command-role-pill">
-              <i className="live-dot" aria-hidden="true" />
-              {admin ? "Admin Command" : "Client Workspace"}
-            </span>
           </div>
           <h1>
             {`Hello${firstName ? ", " + firstName : ""}. Let’s move things forward.`}
@@ -433,7 +442,7 @@ export default async function Dashboard() {
               <div className="command-kpi-top">
                 <span>{kpiLabel}</span>
                 <span className="command-kpi-icon">
-                  <Icon size={17} aria-hidden="true" />
+                  <Icon size={16} aria-hidden="true" />
                 </span>
               </div>
               <strong>{count ?? 0}</strong>
@@ -472,7 +481,10 @@ export default async function Dashboard() {
             </div>
 
             {featuredProjects.length ? (
-              <div className="project-grid command-project-grid">
+              <div
+                className={`project-grid command-project-grid ${projectGridMode}`}
+                data-project-count={featuredProjects.length}
+              >
                 {featuredProjects.map((p) => {
                   const projectMilestones = milestones.filter(
                     (m) => m.project_id === p.id,
@@ -481,6 +493,13 @@ export default async function Dashboard() {
                   const approvedCount = projectMilestones.filter(
                     (m) => m.status === "approved",
                   ).length;
+                  const inReviewCount = projectMilestones.filter(
+                    (m) => m.status === "in_review",
+                  ).length;
+                  const remainingCount = Math.max(
+                    0,
+                    projectMilestones.length - approvedCount,
+                  );
                   const pct = hasMilestones ? progress(projectMilestones) : null;
                   const clientInfo = clientById.get(p.client_id);
                   const clientDisplay =
@@ -504,22 +523,44 @@ export default async function Dashboard() {
                     <Link
                       key={p.id}
                       href={"/projects/" + p.id}
-                      className="project-card command-project-card glass-container"
+                      className={`project-card command-project-card glass-container ${isSingleProject ? "is-featured-single" : ""}`}
                     >
-                      <div className="card-top">
-                        <div className="command-project-brand">
-                          <span className="project-symbol glass-container-circle glass-container">
-                            <FolderOpen size={19} aria-hidden="true" />
-                          </span>
-                          <p className="caption">{clientDisplay}</p>
+                      <div className="command-project-main">
+                        <div className="card-top">
+                          <div className="command-project-brand">
+                            <span className="project-symbol glass-container-circle glass-container">
+                              <FolderOpen size={18} aria-hidden="true" />
+                            </span>
+                            <div className="command-project-brand-meta">
+                              <p className="caption">{clientDisplay}</p>
+                              {isSingleProject && (
+                                <span className="command-featured-tag">
+                                  Active workspace
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <Badge value={p.archived ? "archived" : p.status} />
                         </div>
-                        <Badge value={p.archived ? "archived" : p.status} />
-                      </div>
 
-                      <h2>{p.name}</h2>
-                      <p className="scope-preview">
-                        {p.scope || "Scope has not been added yet."}
-                      </p>
+                        <h2>{p.name}</h2>
+                        <p className="scope-preview">
+                          {p.scope || "Scope has not been added yet."}
+                        </p>
+
+                        <footer className="command-project-footer">
+                          <span className="command-project-due">
+                            <CalendarDays size={13} aria-hidden="true" />
+                            Due {date(p.deadline)}
+                          </span>
+                          <span
+                            className={`command-next-action tone-${nextAction.tone}`}
+                          >
+                            {nextAction.text}
+                            <ArrowUpRight size={14} aria-hidden="true" />
+                          </span>
+                        </footer>
+                      </div>
 
                       {hasMilestones && pct !== null ? (
                         <div className="command-project-progress">
@@ -551,11 +592,27 @@ export default async function Dashboard() {
                               </span>
                             </div>
                           )}
+                          {isSingleProject && (
+                            <div className="command-single-project-metrics">
+                              <div>
+                                <span>Approved</span>
+                                <strong>{approvedCount}</strong>
+                              </div>
+                              <div>
+                                <span>In review</span>
+                                <strong>{inReviewCount}</strong>
+                              </div>
+                              <div>
+                                <span>Remaining</span>
+                                <strong>{remainingCount}</strong>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="command-project-progress is-unscheduled">
                           <div className="progress-label">
-                            <span>No milestones scheduled yet</span>
+                            <span>Milestone schedule</span>
                             <span className="command-status-text">
                               {label(p.status)}
                             </span>
@@ -570,21 +627,20 @@ export default async function Dashboard() {
                                 : "Milestone schedule in preparation"}
                             </span>
                           </div>
+                          {isSingleProject && (
+                            <div className="command-single-project-metrics">
+                              <div>
+                                <span>Status</span>
+                                <strong>{label(p.status)}</strong>
+                              </div>
+                              <div>
+                                <span>Target</span>
+                                <strong>{date(p.deadline)}</strong>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
-
-                      <footer>
-                        <span className="command-project-due">
-                          <CalendarDays size={13} aria-hidden="true" />
-                          Due {date(p.deadline)}
-                        </span>
-                        <span
-                          className={`command-next-action tone-${nextAction.tone}`}
-                        >
-                          {nextAction.text}
-                          <ArrowUpRight size={15} aria-hidden="true" />
-                        </span>
-                      </footer>
                     </Link>
                   );
                 })}
@@ -704,28 +760,76 @@ export default async function Dashboard() {
                         <i className="legend-dot approved" />
                         Approved
                       </span>
-                      <strong>{milestoneCounts.approved}</strong>
+                      <div className="command-legend-value">
+                        <strong>{milestoneCounts.approved}</strong>
+                        {totalScopedMilestones > 0 && (
+                          <small>
+                            {Math.round(
+                              (milestoneCounts.approved /
+                                totalScopedMilestones) *
+                                100,
+                            )}
+                            %
+                          </small>
+                        )}
+                      </div>
                     </div>
                     <div className="command-legend-item">
                       <span className="legend-label">
                         <i className="legend-dot review" />
                         In review
                       </span>
-                      <strong>{milestoneCounts.in_review}</strong>
+                      <div className="command-legend-value">
+                        <strong>{milestoneCounts.in_review}</strong>
+                        {totalScopedMilestones > 0 && (
+                          <small>
+                            {Math.round(
+                              (milestoneCounts.in_review /
+                                totalScopedMilestones) *
+                                100,
+                            )}
+                            %
+                          </small>
+                        )}
+                      </div>
                     </div>
                     <div className="command-legend-item">
                       <span className="legend-label">
                         <i className="legend-dot changes" />
                         Changes requested
                       </span>
-                      <strong>{milestoneCounts.changes_requested}</strong>
+                      <div className="command-legend-value">
+                        <strong>{milestoneCounts.changes_requested}</strong>
+                        {totalScopedMilestones > 0 && (
+                          <small>
+                            {Math.round(
+                              (milestoneCounts.changes_requested /
+                                totalScopedMilestones) *
+                                100,
+                            )}
+                            %
+                          </small>
+                        )}
+                      </div>
                     </div>
                     <div className="command-legend-item">
                       <span className="legend-label">
                         <i className="legend-dot planned" />
                         Planned
                       </span>
-                      <strong>{milestoneCounts.planned}</strong>
+                      <div className="command-legend-value">
+                        <strong>{milestoneCounts.planned}</strong>
+                        {totalScopedMilestones > 0 && (
+                          <small>
+                            {Math.round(
+                              (milestoneCounts.planned /
+                                totalScopedMilestones) *
+                                100,
+                            )}
+                            %
+                          </small>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -826,7 +930,7 @@ export default async function Dashboard() {
                         <Link
                           key={s.id}
                           href="/approvals"
-                          className="list-row command-action-row"
+                          className="list-row command-action-row tone-warning"
                         >
                           <div className="command-action-row-body">
                             <strong>{ms?.title || "Milestone review"}</strong>
@@ -852,7 +956,7 @@ export default async function Dashboard() {
                         <Link
                           key={m.id}
                           href={`/projects/${m.project_id}?tab=milestones`}
-                          className="list-row command-action-row"
+                          className="list-row command-action-row tone-danger"
                         >
                           <div className="command-action-row-body">
                             <strong>{m.title}</strong>
@@ -879,7 +983,7 @@ export default async function Dashboard() {
                       return (
                         <Link
                           key={p.id}
-                          className="list-row command-action-row"
+                          className={`list-row command-action-row ${isOverdue ? "tone-danger" : "tone-neutral"}`}
                           href={"/projects/" + p.id}
                         >
                           <div className="command-action-row-body">
@@ -922,10 +1026,20 @@ export default async function Dashboard() {
             <div className="section-heading compact command-panel-header">
               <div>
                 <p className="eyebrow">LIVE TIMELINE</p>
-                <h2 id="recent-activity-heading">
-                  <Activity size={18} aria-hidden="true" />
-                  Latest updates
-                </h2>
+                <div className="command-heading-title-row">
+                  <h2 id="recent-activity-heading">
+                    <Activity size={18} aria-hidden="true" />
+                    Latest updates
+                  </h2>
+                  {unreadNoticesCount > 0 && (
+                    <span
+                      className="command-activity-unread-pill"
+                      aria-label={`${unreadNoticesCount} unread notifications`}
+                    >
+                      {unreadNoticesCount} unread
+                    </span>
+                  )}
+                </div>
               </div>
               <Link href="/notifications" className="text-link">
                 View all <ArrowUpRight size={15} />
@@ -933,7 +1047,7 @@ export default async function Dashboard() {
             </div>
 
             {notices.length > 0 ? (
-              <div className="command-activity-timeline">
+              <div className="command-activity-timeline" role="list">
                 {notices.map((n) => {
                   const assocProject = projectById.get(n.project_id);
                   const unread = !n.read_at;
@@ -946,38 +1060,49 @@ export default async function Dashboard() {
 
                   return (
                     <Link
-                      className={`list-row command-activity-item ${unread ? "is-unread" : ""}`}
+                      className={`list-row command-activity-item ${unread ? "is-unread" : "is-read"}`}
                       key={n.id}
                       href={"/projects/" + n.project_id}
+                      role="listitem"
                     >
                       <span
                         className={`command-activity-node kind-${n.kind}`}
                         aria-hidden="true"
                       >
-                        <KindIcon size={14} />
+                        <KindIcon size={13} />
                       </span>
                       <div className="command-activity-body">
                         <div className="command-activity-meta-top">
-                          <span className={`command-activity-kind kind-${n.kind}`}>
-                            {label(n.kind)}
-                          </span>
-                          {assocProject && (
-                            <span className="command-activity-project">
-                              {assocProject.name}
-                            </span>
-                          )}
-                          {unread && (
+                          <div className="command-activity-meta-left">
+                            {unread && (
+                              <span
+                                className="command-unread-dot"
+                                title="Unread notification"
+                                aria-hidden="true"
+                              />
+                            )}
                             <span
-                              className="command-unread-dot"
-                              title="Unread notification"
-                            />
-                          )}
+                              className={`command-activity-kind kind-${n.kind}`}
+                            >
+                              {label(n.kind)}
+                            </span>
+                            {assocProject && (
+                              <span className="command-activity-project">
+                                {assocProject.name}
+                              </span>
+                            )}
+                          </div>
+                          <time
+                            className="command-activity-time"
+                            dateTime={n.created_at}
+                          >
+                            {timestamp(n.created_at)}
+                          </time>
                         </div>
-                        <strong>{n.message}</strong>
-                        <small>{timestamp(n.created_at)}</small>
+                        <p className="command-activity-message">{n.message}</p>
                       </div>
                       <ArrowUpRight
-                        size={15}
+                        size={14}
                         className="command-activity-arrow"
                         aria-hidden="true"
                       />
