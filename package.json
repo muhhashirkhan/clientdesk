@@ -12,7 +12,9 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:integration": "node --env-file=.env.local scripts/integration.mjs",
     "bootstrap:admin": "node --env-file=.env.local scripts/bootstrap-admin.mjs",
-    "test:smoke": "node scripts/smoke.mjs"
+    "test:smoke": "node scripts/smoke.mjs",
+    "test:auth": "node --env-file=.env.local scripts/auth-browser-test.mjs",
+    "test:recovery": "node --env-file=.env.local scripts/recovery-browser-test.mjs"
   },
   "dependencies": {
     "@react-three/fiber": "^9.8.1",

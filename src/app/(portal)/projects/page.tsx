@@ -36,7 +36,7 @@ export default async function Projects({
   const q = (p.q || "").slice(0, 160);
   const currentStatus = p.status || "";
   const isArchived = p.archived === "true";
-  const page = Math.max(1, Math.min(10000, Number(p.page) || 1));
+  const page = Math.max(1, Math.min(10000, Math.floor(Number(p.page)) || 1));
   const { db, profile } = await session();
   const admin = profile.role === "admin";
 
@@ -65,7 +65,7 @@ export default async function Projects({
             projects.map((proj) => proj.id),
           )
       : Promise.resolve({ data: [], error: null }),
-    db.from("clients").select("id,name,company"),
+    projects.length ? db.from("clients").select("id,name,company").in("id", [...new Set(projects.map(project => project.client_id))]) : Promise.resolve({data:[],error:null}),
   ]);
   check(ms.error);
   check(cs.error);

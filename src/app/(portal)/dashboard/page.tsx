@@ -14,6 +14,7 @@ import {
   BarChart3,
   FolderOpen,
 } from "lucide-react";
+import { readAllRows } from "@/lib/read-all";
 import { session, check } from "@/lib/data";
 import { Empty, NewProjectLink, Badge } from "@/components/ui";
 import { date, label, progress, timestamp } from "@/lib/utils";
@@ -25,11 +26,13 @@ import type {
   Client,
 } from "@/lib/types";
 
+type DashboardMilestone = Pick<Milestone, "id" | "project_id" | "title" | "status" | "due_date" | "created_at">;
+
 type ClientSummary = Pick<Client, "id" | "name" | "company">;
 
 function getProjectNextAction(
   project: Project,
-  projectMilestones: Milestone[],
+  projectMilestones: DashboardMilestone[],
   admin: boolean,
 ): { text: string; tone: "emerald" | "warning" | "danger" | "muted" } {
   if (project.status === "completed") {
@@ -111,11 +114,7 @@ export default async function Dashboard() {
       .eq("archived", false)
       .order("updated_at", { ascending: false })
       .limit(24),
-    db
-      .from("milestones")
-      .select("id,project_id,title,status,due_date,created_at")
-      .order("created_at", { ascending: true })
-      .limit(500),
+    Promise.resolve({data: [], error: null}),
     db
       .from("projects")
       .select("id,name,status,deadline,archived")
@@ -149,7 +148,14 @@ export default async function Dashboard() {
   const changesRequestedCount = results[3].count ?? 0;
 
   const allProjects = (results[4].data ?? []) as Project[];
-  const milestones = (results[5].data ?? []) as Milestone[];
+  const milestoneResult = allProjects.length
+    ? await readAllRows<DashboardMilestone>((from, to) => db.from("milestones")
+        .select("id,project_id,title,status,due_date,created_at")
+        .in("project_id", allProjects.map((project) => project.id))
+        .order("created_at").order("id").range(from, to))
+    : {data: [], error: null};
+  check(milestoneResult.error);
+  const milestones = milestoneResult.data;
   const deadlines = (results[6].data ?? []) as Project[];
   const notices = (results[7].data ?? []) as Notice[];
   const submissions = (results[8].data ?? []) as Submission[];
@@ -172,7 +178,7 @@ export default async function Dashboard() {
   const projectById = new Map<string, Project>(
     allProjects.map((p) => [p.id, p]),
   );
-  const milestoneById = new Map<string, Milestone>(
+  const milestoneById = new Map<string, DashboardMilestone>(
     milestones.map((m) => [m.id, m]),
   );
   const clientById = new Map<string, ClientSummary>(

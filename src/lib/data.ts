@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect, notFound } from "next/navigation";
 import { configured, serverClient } from "./supabase/server";
+import { readAllRows } from "./read-all";
 import { uuid } from "./validation";
 import type {
   Profile,
@@ -14,14 +15,7 @@ import type {
 } from "./types";
 export function check(error: { message: string; code?: string } | null) {
   if (!error) return;
-  if (
-    /row-level security|permission denied|violates|syntax|PGRST|schema cache/i.test(
-      error.message,
-    )
-  ) {
-    throw new Error("Workspace data could not be loaded. Please try again.");
-  }
-  throw new Error(error.message);
+  throw new Error("Workspace data could not be loaded. Please try again.");
 }
 export const session = cache(async () => {
   if (!configured()) redirect("/login");
@@ -56,30 +50,23 @@ export async function projectData(id: string) {
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (result.error || !result.data) notFound();
+  check(result.error);
+  if (!result.data) notFound();
   const project = result.data as Project;
   const results = await Promise.all([
-    s.db
-      .from("milestones")
-      .select("*")
-      .eq("project_id", id)
-      .order("created_at"),
-    s.db
-      .from("submissions")
-      .select("*")
-      .eq("project_id", id)
-      .order("created_at", { ascending: false }),
-    s.db
-      .from("decisions")
-      .select("*")
-      .eq("project_id", id)
-      .order("created_at", { ascending: false }),
-    s.db
-      .from("project_files")
-      .select("*")
-      .eq("project_id", id)
-      .order("created_at", { ascending: false }),
-    s.db.from("comments").select("*").eq("project_id", id).order("created_at"),
+    readAllRows<Milestone>((from, to) => s.db
+      .from("milestones").select("*").eq("project_id", id)
+      .order("created_at", {ascending: true}).order("id").range(from, to)),
+    readAllRows<Submission>((from, to) => s.db
+      .from("submissions").select("*").eq("project_id", id)
+      .order("created_at", {ascending: false}).order("id").range(from, to)),
+    readAllRows<Decision>((from, to) => s.db
+      .from("decisions").select("*").eq("project_id", id)
+      .order("created_at", {ascending: false}).order("id").range(from, to)),
+    readAllRows<ProjectFile>((from, to) => s.db
+      .from("project_files").select("*").eq("project_id", id)
+      .order("created_at", {ascending: false}).order("id").range(from, to)),
+    readAllRows<Comment>((from, to) => s.db.from("comments").select("*").eq("project_id", id).order("created_at").order("id").range(from, to)),
     s.db.from("clients").select("*").eq("id", project.client_id).single(),
   ]);
   results.forEach((r) => check(r.error));

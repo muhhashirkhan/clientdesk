@@ -1,27 +1,21 @@
-// Requests one real recovery email to the owner's approved inbox, without
-// consuming that link or changing their password. Full recovery uses a
-// disposable account and an official generated recovery token in memory.
+// Local recovery test using a disposable testing account; no emails are sent.
+import {assertTestTarget} from "./test-target.mjs";
+assertTestTarget();
 import { createClient } from "@supabase/supabase-js";
 import { chromium } from "@playwright/test";
 import { randomUUID, randomBytes } from "node:crypto";
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 
-const base = "https://aiquor-clientdesk.vercel.app";
+const base = process.env.CLIENTDESK_PREVIEW_URL || "http://localhost:3013";
+if (!["localhost","127.0.0.1"].includes(new URL(base).hostname)) throw Error("Recovery browser test is local only.");
 const service = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const must = ({ data, error }) => { if (error) throw error; return data; };
-const browser = await chromium.launch();
+let browser;
 let userId;
 try {
-  const page = await browser.newPage();
-  page.setDefaultTimeout(30000);
-  await page.goto(base + "/forgot-password");
-  await page.getByLabel("Email address", { exact: true }).fill("imeanhashir88@gmail.com");
-  await page.getByRole("button", { name: "Send reset link", exact: true }).click();
-  await page.getByText("If this email has an account, a password-reset link will arrive shortly. Check your spam folder too.", { exact: true }).waitFor();
-  console.log("Owned-inbox password-reset request accepted by Supabase; inbox delivery requires its separate check.");
-
+  browser = await chromium.launch();
   const email = "clientdesk-recovery-" + randomUUID() + "@example.test";
   const oldPassword = randomBytes(24).toString("base64url");
   const newPassword = randomBytes(24).toString("base64url");
@@ -58,13 +52,13 @@ try {
   assert.equal(await replay.getByLabel("New password", { exact: true }).count(), 0);
   await writeFile("test-results/recovery-browser-report.json", JSON.stringify({
     date: new Date().toISOString(), origin: base,
-    checks: ["owned reset request accepted", "fresh-browser recovery token",
+    checks: ["fresh-browser recovery token",
       "saved new password", "sign-out and new-password browser login",
       "old password rejected", "used link rejected"], ownedPasswordChanged: false,
-    deliveryVerifiedSeparately: true
+    deliveryVerifiedSeparately: false, emailSent: false
   }, null, 2));
-  console.log("PASS: hosted recovery callback, saved password, browser re-login, old-password denial and used-link rejection. Owned password unchanged.");
+  console.log("PASS: local recovery callback, saved password, browser re-login, old-password denial and used-link rejection. Owned password unchanged.");
 } finally {
-  await browser.close();
+  await browser?.close();
   if (userId) must(await service.auth.admin.deleteUser(userId));
 }

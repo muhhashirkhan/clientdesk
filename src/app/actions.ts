@@ -1,5 +1,6 @@
 "use server";
 import { z } from "zod";
+import { PublicError, operationMessage } from "@/lib/errors";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { serverClient } from "@/lib/supabase/server";
@@ -22,25 +23,7 @@ const saved = (message: string, redirectTo?: string): ActionResult => ({
   redirectTo,
 });
 function must(error: { message: string; code?: string } | null) {
-  if (!error) return;
-  if (error.code === "PGRST116") {
-    throw new Error(
-      "The record was not changed. It may no longer be available.",
-    );
-  }
-  if (/row-level security|permission denied/i.test(error.message)) {
-    throw new Error(
-      "You don’t have permission to modify this record, or the project is read-only.",
-    );
-  }
-  if (
-    /violates foreign key|violates check constraint|invalid input syntax|PGRST|schema cache/i.test(
-      error.message,
-    )
-  ) {
-    throw new Error("The change could not be saved. Please check your input and try again.");
-  }
-  throw new Error(error.message);
+  if (error) throw new PublicError(operationMessage(error));
 }
 async function run(fn: () => Promise<ActionResult>): Promise<ActionResult> {
   try {
@@ -51,7 +34,7 @@ async function run(fn: () => Promise<ActionResult>): Promise<ActionResult> {
       message:
         e instanceof z.ZodError
           ? e.issues[0].message
-          : e instanceof Error
+          : e instanceof PublicError
             ? e.message
             : "The change could not be saved. Please try again.",
     };
@@ -63,7 +46,7 @@ async function account(admin = false) {
     data: { user },
     error,
   } = await db.auth.getUser();
-  if (error || !user) throw new Error("Please sign in again.");
+  if (error || !user) throw new PublicError("Please sign in again.");
   const result = await db
     .from("profiles")
     .select("*")
@@ -72,7 +55,7 @@ async function account(admin = false) {
   must(result.error);
   const profile = result.data as Profile;
   if (admin && profile.role !== "admin")
-    throw new Error("Only the Aiquor team can do this.");
+    throw new PublicError("Only the Aiquor team can do this.");
   return { db, user, profile };
 }
 function refresh() {
@@ -86,13 +69,13 @@ async function changed(
 ) {
   const result = await query;
   if (result.error?.code === "PGRST116") {
-    throw new Error(
+    throw new PublicError(
       "The record was not changed. It may no longer be available.",
     );
   }
   must(result.error);
   if (!result.data)
-    throw new Error(
+    throw new PublicError(
       "The record was not changed. It may no longer be available.",
     );
   refresh();
@@ -113,7 +96,7 @@ export async function signIn(_: ActionResult, form: FormData) {
       password: v.password,
     });
     if (error)
-      throw new Error(
+      throw new PublicError(
         "Sign-in failed. Check your email and password, or reset your password.",
       );
     refresh();
@@ -178,9 +161,8 @@ export async function acceptInvitation(_: ActionResult, form: FormData) {
     must(result.error);
     const auth = await db.auth.updateUser({ password: v.password });
     if (auth.error)
-      throw new Error(
-        "Invitation accepted, but your password was not updated: " +
-          auth.error.message,
+      throw new PublicError(
+        "Invitation accepted, but your password could not be updated. Try setting it again.",
       );
     await changed(
       db
@@ -201,7 +183,7 @@ export async function createClientRecord(_: ActionResult, form: FormData) {
     const { db } = await account(true);
     const result = await db.from("clients").insert(v).select("id").single();
     if (result.error?.code === "23505")
-      throw new Error("A client with this email already exists.");
+      throw new PublicError("A client with this email already exists.");
     must(result.error);
     refresh();
     return saved(
@@ -270,9 +252,8 @@ export async function inviteClient(_: ActionResult, form: FormData) {
         });
         must(retry.error);
       } else
-        throw new Error(
-          "The invitation is saved, but email delivery failed: " +
-            sent.error.message,
+        throw new PublicError(
+          "The invitation is saved, but email delivery failed. Please try again or contact Aiquor.",
         );
     }
     await changed(
@@ -331,7 +312,7 @@ export async function createProject(_: ActionResult, form: FormData) {
     const { db } = await account(true);
     const result = await db.from("projects").insert(v).select("id").single();
     must(result.error);
-    if (!result.data) throw new Error("Project was not saved.");
+    if (!result.data) throw new PublicError("Project was not saved.");
     refresh();
     return saved("Project created.", "/projects/" + result.data.id);
   });
@@ -348,11 +329,11 @@ export async function updateProject(_: ActionResult, form: FormData) {
       .maybeSingle();
     must(current.error);
     if (!current.data)
-      throw new Error(
+      throw new PublicError(
         "The record was not changed. It may no longer be available.",
       );
     if (current.data.archived)
-      throw new Error(
+      throw new PublicError(
         "Restore this archived project before editing its details.",
       );
     await changed(
@@ -444,7 +425,7 @@ export async function decideSubmission(_: ActionResult, form: FormData) {
       })
       .parse(input(form));
     if (v.choice === "changes_requested" && !v.feedback)
-      throw new Error("Describe the changes you need.");
+      throw new PublicError("Describe the changes you need.");
     const { db } = await account();
     const result = await db.rpc("decide_submission", {
       submission: v.submission,
@@ -490,9 +471,9 @@ export async function deleteFile(_: ActionResult, form: FormData) {
       .eq("id", id)
       .maybeSingle();
     must(file.error);
-    if (!file.data) throw new Error("File not found.");
+    if (!file.data) throw new PublicError("File not found.");
     if (file.data.uploaded_by !== user.id && profile.role !== "admin")
-      throw new Error("You can only delete files you uploaded.");
+      throw new PublicError("You can only delete files you uploaded.");
     const proj = await db
       .from("projects")
       .select("archived,status")
@@ -500,7 +481,7 @@ export async function deleteFile(_: ActionResult, form: FormData) {
       .maybeSingle();
     must(proj.error);
     if (!proj.data || proj.data.archived || proj.data.status === "completed")
-      throw new Error("This project is read-only.");
+      throw new PublicError("This project is read-only.");
     const removed = await db.storage
       .from("project-files")
       .remove([file.data.storage_path]);

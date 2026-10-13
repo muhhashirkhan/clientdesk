@@ -1,3 +1,5 @@
+import { assertTestTarget } from "./test-target.mjs";
+assertTestTarget();
 // Run against a separate disposable Supabase test project, never production.
 // This tests the real Auth, PostgREST and Storage APIs. It does NOT prove email
 // delivery or browser flows; the two-inbox acceptance check remains mandatory.
@@ -55,6 +57,9 @@ try {
     must(await users.at(-1).db.auth.signInWithPassword({ email, password }));
   }
   const [admin, client, other] = users;
+  const anonymous = fresh();
+  const anonymousRead = await anonymous.from("projects").select();
+  assert(anonymousRead.error || anonymousRead.data.length === 0);
   const customer = must(
     await admin.db
       .from("clients")
@@ -93,6 +98,11 @@ try {
       .error,
   );
   must(await client.db.rpc("accept_invitation", { invitation: invitation.id }));
+  for (const invalid of [{expires_at:new Date(Date.now()-86400000).toISOString()}, {revoked_at:new Date().toISOString()}]) {
+    const expired = must(await service.from("invitations").insert({client_id:customer.id,email:client.email,invited_by:admin.id,...invalid}).select().single());
+    assert((await client.db.rpc("accept_invitation",{invitation:expired.id})).error);
+  }
+  assert((await client.db.rpc("accept_invitation",{invitation:randomUUID()})).error);
   const path = `${project.id}/${client.id}/${randomUUID()}-acceptance.txt`,
     contents = `Saved ClientDesk file ${run}`;
   paths.push(path);
@@ -238,6 +248,35 @@ try {
       0,
       `${table} leaked`,
     );
+  // Settings, notification mutations, project edits and read-only enforcement.
+  const profileUpdate = must(await client.db.from("profiles").update({full_name:"Updated test client"}).eq("id",client.id).select("full_name").single());
+  assert.equal(profileUpdate.full_name,"Updated test client");
+  assert((await client.db.from("profiles").update({role:"admin"}).eq("id",client.id)).error);
+  const business = must(await admin.db.from("business_settings").select().single());
+  assert.equal(must(await client.db.from("business_settings").update({name:"Unauthorized"}).eq("id",true).select()).length,0);
+  try {
+    must(await admin.db.from("business_settings").update({name:"Disposable test studio"}).eq("id",true));
+    assert.equal(must(await client.db.from("business_settings").select("name").single()).name,"Disposable test studio");
+  } finally {
+    must(await service.from("business_settings").update({name:business.name}).eq("id",true));
+  }
+  const notices = must(await client.db.from("notifications").select().is("read_at",null));
+  assert(notices.length > 0);
+  must(await client.db.from("notifications").update({read_at:new Date().toISOString()}).eq("id",notices[0].id));
+  assert(must(await client.db.from("notifications").select().eq("id",notices[0].id).single()).read_at);
+  assert.equal(must(await other.db.from("notifications").select()).length,0);
+  must(await admin.db.from("projects").update({scope:"Edited persisted scope"}).eq("id",project.id));
+  assert.equal(must(await client.db.from("projects").select("scope").eq("id",project.id).single()).scope,"Edited persisted scope");
+  for (const state of [{archived:true},{archived:false,status:"completed"}]) {
+    must(await admin.db.from("projects").update(state).eq("id",project.id));
+    assert((await client.db.from("comments").insert({project_id:project.id,body:"Blocked write"})).error);
+    assert((await admin.db.from("milestones").insert({project_id:project.id,title:"Blocked milestone"})).error);
+  }
+  must(await admin.db.from("projects").update({archived:false,status:"active"}).eq("id",project.id));
+  must(await client.db.storage.from("project-files").remove([path]));
+  const file = must(await client.db.from("project_files").select("id").eq("project_id",project.id).single());
+  must(await client.db.from("project_files").delete().eq("id",file.id));
+  assert.equal(must(await client.db.from("project_files").select().eq("id",file.id)).length,0);
   must(
     await admin.db
       .from("client_members")
@@ -251,7 +290,7 @@ try {
       .error,
   );
   console.log(
-    "PASS: real API login, membership, file upload/download, replies, changes, approval, re-login persistence and third-account isolation. Email/browser acceptance still required.",
+    "PASS: real API login, membership, file upload/download/delete, replies, changes, approval, profile/business settings, notifications, project edits/archive/completion, re-login persistence and third-account isolation. Email/browser acceptance still required.",
   );
 } finally {
   const errors = [];

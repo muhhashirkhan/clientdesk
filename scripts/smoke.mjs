@@ -34,7 +34,7 @@ try {
     }
     await page.goto(origin + "/dashboard");
     await page.waitForURL("**/login");
-    assert(await page.getByRole("button", { name: "Sign in" }).isDisabled());
+    assert.equal(await page.getByRole("button", { name: "Sign in" }).isDisabled(), process.env.CLIENTDESK_SMOKE_CONFIGURED !== "true");
     await page.screenshot({
       path: `test-results/login-${width}.png`,
       fullPage: true,

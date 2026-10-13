@@ -5,11 +5,13 @@ import {
   useRef,
   useState,
   useId,
+  useTransition,
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, LoaderCircle, RefreshCw, Upload } from "lucide-react";
 import type { Action, ActionResult } from "@/lib/types";
+import { PublicError, operationMessage } from "@/lib/errors";
 import { browserClient } from "@/lib/supabase/client";
 const initial: ActionResult = { ok: false, message: "" };
 export function Form({
@@ -48,6 +50,7 @@ export function Form({
   return (
     <form
       ref={ref}
+      aria-busy={pending}
       action={dispatch}
       className={`form ${className}`}
       onSubmit={(e) => {
@@ -110,6 +113,7 @@ export function Field({
         required={required}
         maxLength={maxLength}
         placeholder={placeholder}
+        aria-describedby={help ? `${id}-help` : undefined}
         autoComplete={
           type === "password"
             ? "new-password"
@@ -120,7 +124,7 @@ export function Field({
                 : "off"
         }
       />
-      {help && <small>{help}</small>}
+      {help && <small id={`${id}-help`}>{help}</small>}
     </label>
   );
 }
@@ -160,14 +164,17 @@ export function Hidden({ name, value }: { name: string; value: string }) {
 }
 export function RefreshButton() {
   const router = useRouter();
+  const [pending, startTransition] = useTransition();
   return (
     <button
       className="icon-button glass-button glass-button-circle"
       title="Refresh current data"
       aria-label="Refresh current data"
-      onClick={() => router.refresh()}
+      disabled={pending}
+      aria-busy={pending}
+      onClick={() => startTransition(() => router.refresh())}
     >
-      <RefreshCw size={17} />
+      <RefreshCw size={17} className={pending ? "spin" : undefined} />
     </button>
   );
 }
@@ -199,16 +206,16 @@ export function UploadForm({
       return;
     }
     setBusy(true);
-    const db = browserClient();
-    const path = `${projectId}/${userId}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100)}`;
     try {
+      const db = browserClient();
+      const path = `${projectId}/${userId}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100)}`;
       const uploaded = await db.storage
         .from("project-files")
         .upload(path, file, {
           upsert: false,
           contentType: file.type || "application/octet-stream",
         });
-      if (uploaded.error) throw uploaded.error;
+      if (uploaded.error) throw new PublicError(operationMessage(uploaded.error));
       const stored = await db.rpc("finalize_upload", {
         project: projectId,
         path,
@@ -216,10 +223,10 @@ export function UploadForm({
       });
       if (stored.error) {
         const cleanup = await db.storage.from("project-files").remove([path]);
-        throw new Error(
+        throw new PublicError(
           cleanup.error
             ? "Upload metadata failed and cleanup is pending. Contact Aiquor."
-            : stored.error.message,
+            : operationMessage(stored.error),
         );
       }
       setIsError(false);
@@ -228,17 +235,13 @@ export function UploadForm({
       router.refresh();
     } catch (error) {
       setIsError(true);
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Upload failed. Please try again.",
-      );
+      setMessage(error instanceof PublicError ? error.message : "Upload could not be completed. Check your connection and project access, then try again.");
     } finally {
       setBusy(false);
     }
   }
   return (
-    <form ref={ref} onSubmit={upload} className="upload-form glass-container">
+    <form ref={ref} onSubmit={upload} className="upload-form glass-container" aria-busy={busy}>
       <Upload size={25} aria-hidden="true" />
       <div>
         <h3>Add files to this project</h3>
